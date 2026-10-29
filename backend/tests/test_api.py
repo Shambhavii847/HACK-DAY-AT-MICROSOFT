@@ -128,3 +128,24 @@ def test_case_cannot_be_completed_without_confirmed_outcome():
         response = client.patch(f"/api/cases/{created.json()['id']}", json={"status": "completed"})
         assert response.status_code == 409
         assert "confirmed fault" in response.json()["detail"]
+
+
+def test_delete_case():
+    with TestClient(app) as client:
+        created = client.post("/api/cases", json={
+            "device_category": "Smartphone",
+            "brand": "DeleteBrand",
+            "model": "DeleteModel",
+            "issue_title": "To be deleted",
+            "symptoms": "Temporary device to delete.",
+            "priority": "low",
+        })
+        assert created.status_code == 201
+        case_id = created.json()["id"]
+
+        del_resp = client.delete(f"/api/cases/{case_id}")
+        assert del_resp.status_code == 200
+        assert del_resp.json()["deleted"] == case_id
+
+        get_resp = client.get(f"/api/cases/{case_id}")
+        assert get_resp.status_code == 404

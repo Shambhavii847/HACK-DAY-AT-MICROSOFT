@@ -59,8 +59,7 @@ def _case_read(case: RepairCase) -> dict[str, Any]:
         "symptoms": case.symptoms,
         "priority": case.priority,
         "status": case.status,
-        "customer_reference": case.customer_reference,
-        "assigned_to": case.assigned_to,
+        "customer_contact": getattr(case, "customer_contact", None),
         "confirmed_fault": case.confirmed_fault,
         "repair_action": case.repair_action,
         "outcome": case.outcome,
@@ -165,8 +164,7 @@ def create_case(payload: RepairCaseCreate, db: Session = Depends(get_db)) -> dic
         symptoms=payload.symptoms.strip(),
         priority=payload.priority,
         status=payload.status,
-        customer_reference=payload.customer_reference.strip() if payload.customer_reference else None,
-        assigned_to=payload.assigned_to.strip() or "Unassigned",
+        customer_contact=payload.customer_contact.strip() if payload.customer_contact else None,
         estimated_minutes=payload.estimated_minutes,
         estimate_cost=payload.estimate_cost,
         data_origin="user_entered",
@@ -175,6 +173,14 @@ def create_case(payload: RepairCaseCreate, db: Session = Depends(get_db)) -> dic
     db.commit()
     db.refresh(case)
     return _case_read(case)
+
+
+@app.delete("/api/cases/{case_id}", tags=["cases"])
+def delete_case(case_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
+    case = _get_case_or_404(db, case_id)
+    db.delete(case)
+    db.commit()
+    return {"ok": True, "deleted": case_id.upper()}
 
 
 @app.get("/api/cases/{case_id}", tags=["cases"])

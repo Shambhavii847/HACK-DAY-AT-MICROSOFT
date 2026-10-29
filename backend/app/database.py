@@ -25,3 +25,14 @@ def create_schema() -> None:
     # Import models here so SQLAlchemy registers every table before create_all.
     from . import models  # noqa: F401
     Base.metadata.create_all(bind=engine)
+    # Ensure customer_contact column exists on SQLite tables created previously
+    try:
+        with engine.connect() as conn:
+            from sqlalchemy import text
+            res = conn.execute(text("PRAGMA table_info(repair_cases)")).fetchall()
+            col_names = [row[1] for row in res]
+            if "customer_contact" not in col_names and "id" in col_names:
+                conn.execute(text("ALTER TABLE repair_cases ADD COLUMN customer_contact VARCHAR(120)"))
+                conn.commit()
+    except Exception:
+        pass
