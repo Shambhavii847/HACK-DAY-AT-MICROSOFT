@@ -1,30 +1,126 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Dispatch, FormEvent, SetStateAction } from 'react'
 import {
-  Activity, AlertCircle, AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight,
+  Activity, AlertCircle, AlertTriangle, ArrowRight,
   BookOpen, Check, CheckCircle2, ChevronDown, ChevronRight, CircleHelp, Clock3,
-  Cpu, FileCheck2, Filter, HardDrive, History, House, Info, Layers3, Lightbulb, LoaderCircle,
-  LockKeyhole, Menu, Plus, Search, ShieldCheck, Smartphone, Sparkles, Stethoscope, Wrench, X,
-  Zap, ClipboardCheck, PackageSearch, BrainCircuit, CircleDot, ExternalLink, RefreshCw,
+  Cpu, ExternalLink, Eye, Filter, Github, History, House, Info, Layers3, Linkedin,
+  LoaderCircle, Mail, Phone, Plus, RefreshCw, RotateCcw, Search,
+  Settings, ShieldCheck, Smartphone, Sparkles, Stethoscope, Trash2,
+  Volume2, VolumeX, X, Zap,
+  ClipboardCheck, PackageSearch, BrainCircuit,
 } from 'lucide-react'
 import { api } from './lib/api'
-import type { CaseDetail, CaseStatus, DashboardSummary, Health, KnowledgeSource, NextCheck, Priority, Recommendation, RepairCase, TestStatus } from './lib/types'
+import type {
+  CaseDetail, CaseStatus, DashboardSummary, Health, KnowledgeSource,
+  NextCheck, Priority, Recommendation, RepairCase, TestStatus,
+} from './lib/types'
 
 const navItems = [
-  { id: 'overview', label: 'Overview', icon: House, group: 'WORKSPACE' },
-  { id: 'cases', label: 'Repair queue', icon: Layers3, group: 'WORKSPACE' },
-  { id: 'diagnostics', label: 'Diagnostics', icon: Stethoscope, group: 'WORKSPACE' },
-  { id: 'memory', label: 'Repair memory', icon: History, group: 'INTELLIGENCE' },
-  { id: 'knowledge', label: 'Knowledge base', icon: BookOpen, group: 'INTELLIGENCE' },
+  { id: 'home', label: 'Home', icon: House },
+  { id: 'overview', label: 'Overview', icon: Eye },
+  { id: 'cases', label: 'Repair Queue', icon: Layers3 },
+  { id: 'diagnostics', label: 'Diagnostics', icon: Stethoscope },
+  { id: 'memory', label: 'Repair Memory', icon: History },
+  { id: 'knowledge', label: 'Knowledge Base', icon: BookOpen },
 ] as const
 
 type NavId = typeof navItems[number]['id']
 type Notice = { kind: 'success' | 'error' | 'info'; text: string } | null
 
-const statusNames: Record<CaseStatus, string> = {
-  new: 'New', diagnosing: 'Diagnosing', waiting_parts: 'Waiting for parts', in_repair: 'In repair', testing: 'Testing', completed: 'Completed', on_hold: 'On hold',
+export interface AppSettings {
+  animationsEnabled: boolean
+  hardwareTelemetry: boolean
+  highContrastHUD: boolean
+  audioEffects: boolean
+  modelEngine: 'gemma-4' | 'fallback-rules'
+  autoTriageOnCreate: boolean
+  strictSafety: boolean
+  confirmDelete: boolean
+  confirmComplete: boolean
+  autoArchive: boolean
 }
-const priorityNames: Record<Priority, string> = { low: 'Low', normal: 'Normal', high: 'High', urgent: 'Urgent' }
+
+const DEFAULT_SETTINGS: AppSettings = {
+  animationsEnabled: true,
+  hardwareTelemetry: true,
+  highContrastHUD: false,
+  audioEffects: true,
+  modelEngine: 'gemma-4',
+  autoTriageOnCreate: true,
+  strictSafety: true,
+  confirmDelete: true,
+  confirmComplete: true,
+  autoArchive: true,
+}
+
+const SETTINGS_STORAGE_KEY = 'fixora_app_settings_v1'
+
+function playUiSound(type: 'click' | 'toggle' | 'boot' | 'danger', settings: AppSettings) {
+  if (!settings.audioEffects || !settings.animationsEnabled) return
+  try {
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    if (!AudioCtx) return
+    const ctx = new AudioCtx()
+    if (ctx.state === 'suspended') void ctx.resume()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    if (type === 'click') {
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(820, ctx.currentTime)
+      osc.frequency.exponentialRampToValueAtTime(420, ctx.currentTime + 0.04)
+      gain.gain.setValueAtTime(0.04, ctx.currentTime)
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.04)
+      osc.start()
+      osc.stop(ctx.currentTime + 0.04)
+    } else if (type === 'toggle') {
+      osc.type = 'triangle'
+      osc.frequency.setValueAtTime(540, ctx.currentTime)
+      osc.frequency.setValueAtTime(840, ctx.currentTime + 0.035)
+      gain.gain.setValueAtTime(0.035, ctx.currentTime)
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.06)
+      osc.start()
+      osc.stop(ctx.currentTime + 0.06)
+    } else if (type === 'boot') {
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(340, ctx.currentTime)
+      osc.frequency.exponentialRampToValueAtTime(980, ctx.currentTime + 0.18)
+      gain.gain.setValueAtTime(0.045, ctx.currentTime)
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.22)
+      osc.start()
+      osc.stop(ctx.currentTime + 0.22)
+    } else if (type === 'danger') {
+      osc.type = 'sawtooth'
+      osc.frequency.setValueAtTime(280, ctx.currentTime)
+      osc.frequency.exponentialRampToValueAtTime(140, ctx.currentTime + 0.1)
+      gain.gain.setValueAtTime(0.05, ctx.currentTime)
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.1)
+      osc.start()
+      osc.stop(ctx.currentTime + 0.1)
+    }
+  } catch {
+    // Ignore audio permission or context restrictions
+  }
+}
+
+const statusNames: Record<CaseStatus, string> = {
+  new: 'New',
+  diagnosing: 'Diagnosing',
+  waiting_parts: 'Waiting for parts',
+  in_repair: 'In repair',
+  testing: 'Testing',
+  completed: 'Completed',
+  on_hold: 'On hold',
+}
+
+const priorityNames: Record<Priority, string> = {
+  low: 'Low',
+  normal: 'Normal',
+  high: 'High',
+  urgent: 'Urgent',
+}
+
 const testOptions: Array<{ value: TestStatus; label: string }> = [
   { value: 'pass', label: 'Pass / changed as expected' },
   { value: 'fail', label: 'Fail / issue persists' },
@@ -32,6 +128,7 @@ const testOptions: Array<{ value: TestStatus; label: string }> = [
   { value: 'not_tested', label: 'Not tested yet' },
   { value: 'not_applicable', label: 'Not applicable' },
 ]
+
 const testSuggestions = [
   'Known-good compatible cable',
   'Known-good compatible power adapter',
@@ -41,85 +138,1004 @@ const testSuggestions = [
   'Battery / temperature safety screening',
 ]
 
+interface TeamMember {
+  name: string
+  role: string
+  isLead?: boolean
+  email: string
+  linkedin: string
+  github: string
+}
+
+const teamMembers: TeamMember[] = [
+  {
+    name: 'Shambhavi',
+    role: 'Team Leader',
+    isLead: true,
+    email: 'socialshambhavi847@gmail.com',
+    linkedin: 'https://www.linkedin.com/in/shambhavi-sharma-16440a405?utm_source=share_via&utm_content=profile&utm_medium=member_android',
+    github: 'https://github.com/Shambhavii847',
+  },
+  {
+    name: 'Tejaswi Gupta',
+    role: 'Team Member',
+    email: 'guptatejaswi651@gmail.com',
+    linkedin: 'https://www.linkedin.com/in/tejaswi-gupta-4396233a6?utm_source=share_via&utm_content=profile&utm_medium=member_android',
+    github: 'https://github.com/guptatejaswi651-ship-it',
+  },
+  {
+    name: 'Parth Singhal',
+    role: 'Team Member',
+    email: 'agarwal.parth2405@gmail.com',
+    linkedin: 'https://www.linkedin.com/in/parth-singhal-120a00447?utm_source=share_via&utm_content=profile&utm_medium=member_android',
+    github: 'https://github.com/parthcodex-ux',
+  },
+  {
+    name: 'Shaurya Taliyan',
+    role: 'Team Member',
+    email: 'taliyanshaurya@gmail.com',
+    linkedin: 'https://www.linkedin.com/in/shaurya-taliyan?utm_source=share_via&utm_content=profile&utm_medium=member_android',
+    github: 'https://github.com/shauryataliyan',
+  },
+]
+
+const SOURCE_CODE_URL = 'https://github.com/Shambhavii847/HACK-DAY-AT-MICROSOFT'
+
 function titleCase(value: string) {
   return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
+
 function dateLabel(value: string | null | undefined) {
   if (!value) return 'Not recorded'
   const date = new Date(value)
   return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
 }
-function currentDateHeading() {
-  return new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'long' }).toUpperCase()
-}
+
 function dateTimeLabel(value: string | null | undefined) {
   if (!value) return 'Not recorded'
   const date = new Date(value)
   return `${date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} · ${date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
 }
-function initials(name: string) {
-  return name.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'FX'
-}
+
 function deviceInitials(category: string) {
   if (category.toLowerCase().includes('laptop')) return 'LT'
   if (category.toLowerCase().includes('desktop')) return 'PC'
   return 'PH'
 }
+
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Something went wrong. Please try again.'
 }
 
 function StatusPill({ status }: { status: string }) {
   const normalized = status.replaceAll('_', '-')
-  return <span className={`status-pill status-${normalized}`}><span className="status-dot" />{statusNames[status as CaseStatus] || titleCase(status)}</span>
-}
-function PriorityPill({ priority }: { priority: string }) {
-  return <span className={`priority-pill priority-${priority}`}>{priority === 'urgent' && <AlertCircle size={12} />}{priorityNames[priority as Priority] || titleCase(priority)}</span>
-}
-function OriginBadge({ origin }: { origin: string }) {
-  return origin === 'demo' ? <span className="origin-badge"><CircleDot size={11} /> Sample</span> : null
-}
-function EmptyState({ icon: Icon, title, description }: { icon: typeof CircleHelp; title: string; description: string }) {
-  return <div className="empty-state"><div className="empty-icon"><Icon size={22} /></div><h3>{title}</h3><p>{description}</p></div>
+  return (
+    <span className={`status-pill status-${normalized}`}>
+      <span className="status-dot" />
+      {statusNames[status as CaseStatus] || titleCase(status)}
+    </span>
+  )
 }
 
-function NewRepairModal({ onClose, onCreate, busy }: { onClose: () => void; onCreate: (data: Record<string, string>) => Promise<void>; busy: boolean }) {
-  const [form, setForm] = useState({ device_category: 'Smartphone', brand: '', model: '', issue_title: '', symptoms: '', priority: 'normal', assigned_to: '', customer_reference: '', estimated_minutes: '30' })
+function PriorityPill({ priority }: { priority: string }) {
+  return (
+    <span className={`priority-pill priority-${priority}`}>
+      {priority === 'urgent' && <AlertCircle size={12} />}
+      {priorityNames[priority as Priority] || titleCase(priority)}
+    </span>
+  )
+}
+
+function EmptyState({ icon: Icon, title, description }: { icon: typeof CircleHelp; title: string; description: string }) {
+  return (
+    <div className="empty-state">
+      <div className="empty-icon"><Icon size={22} /></div>
+      <h3>{title}</h3>
+      <p>{description}</p>
+    </div>
+  )
+}
+
+function ConfirmModal({
+  isOpen,
+  title,
+  message,
+  confirmText,
+  confirmTone = 'primary',
+  busy = false,
+  onConfirm,
+  onCancel,
+}: {
+  isOpen: boolean
+  title: string
+  message: string
+  confirmText: string
+  confirmTone?: 'primary' | 'danger'
+  busy?: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  if (!isOpen) return null
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onCancel() }}>
+      <div className="modal-card confirm-modal-card" role="dialog" aria-modal="true">
+        <div className="modal-head">
+          <h2>{title}</h2>
+          <button className="icon-button" type="button" onClick={onCancel} disabled={busy} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="confirm-modal-body">
+          <p>{message}</p>
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="button button-ghost" onClick={onCancel} disabled={busy}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className={`button ${confirmTone === 'danger' ? 'button-danger' : 'button-primary'}`}
+            onClick={onConfirm}
+            disabled={busy}
+          >
+            {busy ? <LoaderCircle className="spin" size={16} /> : null}
+            {confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CreditsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  if (!isOpen) return null
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal-card credits-modal-card" role="dialog" aria-modal="true">
+        <div className="modal-head credits-modal-head">
+          <div>
+            <span className="eyebrow">HACK DAY AT MICROSOFT</span>
+            <h2>Project Credits</h2>
+          </div>
+          <button className="icon-button" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="credits-modal-body">
+          <div className="credits-team-grid">
+            {teamMembers.map((member) => (
+              <div key={member.name} className={`credit-member-card ${member.isLead ? 'lead-card' : ''}`}>
+                <div className="member-card-header">
+                  <div>
+                    <span className={`member-role-tag ${member.isLead ? 'tag-lead' : ''}`}>
+                      {member.role}
+                    </span>
+                    <a
+                      href={member.linkedin}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="member-name-link"
+                      title="Open LinkedIn"
+                    >
+                      {member.name}
+                      <Linkedin size={13} className="member-li-icon" />
+                    </a>
+                  </div>
+                </div>
+
+                <div className="member-actions">
+                  <a
+                    href={member.github}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="member-action-btn"
+                    title="View GitHub"
+                  >
+                    <Github size={13} /> GitHub
+                  </a>
+                  <a
+                    href={`mailto:${member.email}`}
+                    className="member-action-btn"
+                    title="Send Email"
+                  >
+                    <Mail size={13} /> Email
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="credits-source-box">
+            <a
+              href={SOURCE_CODE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="source-code-button"
+            >
+              <Github size={17} />
+              <span>Source Code · GitHub Repository</span>
+              <ExternalLink size={14} />
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StandbyModal({
+  isOpen,
+  onResume,
+  settings,
+}: {
+  isOpen: boolean
+  onResume: () => void
+  settings: AppSettings
+}) {
+  if (!isOpen) return null
+
+  const handleForceClose = () => {
+    playUiSound('click', settings)
+    try {
+      window.close()
+    } catch {}
+    try {
+      const win = window.open('', '_self')
+      if (win) win.close()
+    } catch {}
+  }
+
+  return (
+    <div className="standby-overlay">
+      <div className="standby-scanlines" />
+      <div className="standby-card">
+        <div className="standby-status-row">
+          <span className="standby-blinker" />
+          <span>SESSION SUSPENDED // WORKSPACE STANDBY</span>
+        </div>
+        <h2>Fixora Hardware OS Disengaged</h2>
+        <p>
+          Diagnostic matrix placed in safe standby mode. All repair logs and test data are stored safely.
+          You can close this tab using <kbd>Cmd+W</kbd> / <kbd>Ctrl+W</kbd> or click Close Tab below:
+        </p>
+        <div className="standby-actions">
+          <button
+            className="game-btn game-btn-primary"
+            onClick={() => {
+              playUiSound('click', settings)
+              onResume()
+            }}
+          >
+            <span className="game-btn-num">&gt;&gt;</span>
+            <span className="game-btn-label">Resume Session</span>
+            <span className="game-btn-bracket">]</span>
+          </button>
+          <button
+            className="game-btn game-btn-quit"
+            onClick={handleForceClose}
+          >
+            <span className="game-btn-num">XX</span>
+            <span className="game-btn-label">Close Tab</span>
+            <span className="game-btn-bracket">]</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LightDiagnosticAwakening({
+  onComplete,
+  enabled,
+  settings,
+}: {
+  onComplete: () => void
+  enabled: boolean
+  settings: AppSettings
+}) {
+  useEffect(() => {
+    if (!enabled) {
+      onComplete()
+      return
+    }
+
+    playUiSound('boot', settings)
+
+    const timer = setTimeout(() => {
+      onComplete()
+    }, 1150)
+
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.key === ' ' || e.key === 'Enter') {
+        onComplete()
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('keydown', handleKey)
+    }
+  }, [enabled, onComplete, settings])
+
+  if (!enabled) return null
+
+  return (
+    <div
+      className="optical-awakening-overlay"
+      onClick={onComplete}
+      role="status"
+      aria-live="polite"
+    >
+      {/* Light energy shockwave expanding outward across the entire screen */}
+      <div className="shockwave-light-ring" />
+      <div className="shockwave-light-ring ring-secondary" />
+
+      {/* Optical scanning reticle centered on the SoC */}
+      <div className="optical-reticle-wrap">
+        <div className="reticle-ring-outer" />
+        <div className="reticle-ring-inner" />
+        <div className="reticle-crosshair-h" />
+        <div className="reticle-crosshair-v" />
+        <div className="reticle-laser-dot" />
+
+        <div className="reticle-telemetry-tag">
+          <Zap size={11} fill="currentColor" />
+          <span>OPTICAL CALIBRATION // 100% FOCUS</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CircuitMapOverlay({ animated }: { animated: boolean }) {
+  return (
+    <svg
+      className="negative-space-circuit-grid"
+      viewBox="0 0 1600 900"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id="traceGrad" x1="1" y1="0.5" x2="0" y2="0.5">
+          <stop offset="0%" stopColor="#25b894" stopOpacity="0.45" />
+          <stop offset="60%" stopColor="#3cd7b2" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="#5ae0c0" stopOpacity="0.1" />
+        </linearGradient>
+        <linearGradient id="pulseGrad" x1="1" y1="0.5" x2="0" y2="0.5">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="1" />
+          <stop offset="35%" stopColor="#43dfb9" stopOpacity="0.95" />
+          <stop offset="100%" stopColor="#1bb790" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+
+      {/* Base Circuit Tracks extending from SoC across the entire negative space */}
+      <path className="circuit-path-base" d="M 1197 437 L 1120 410 L 960 380 L 820 350 L 640 330 L 440 330 L 370 330" />
+      <path className="circuit-path-base" d="M 1197 437 L 1110 435 L 940 435 L 780 410 L 590 395 L 430 395 L 370 395" />
+      <path className="circuit-path-base" d="M 1197 437 L 1110 455 L 950 475 L 770 475 L 580 460 L 430 460 L 370 460" />
+      <path className="circuit-path-base" d="M 1197 437 L 1130 475 L 980 525 L 820 540 L 620 525 L 440 525 L 370 525" />
+      <path className="circuit-path-base" d="M 1197 437 L 1140 495 L 1000 580 L 840 600 L 640 590 L 440 590 L 370 590" />
+      <path className="circuit-path-base" d="M 1197 437 L 1150 515 L 1020 640 L 860 670 L 650 655 L 440 655 L 370 655" />
+
+      {/* Ambient Negative Space Branch Lines */}
+      <path className="circuit-path-base" d="M 960 380 L 760 270 L 520 220 L 320 220 L 220 180 L 140 180" />
+      <path className="circuit-path-base" d="M 640 330 L 510 260 L 340 260 L 240 290 L 160 290" />
+      <path className="circuit-path-base" d="M 370 330 L 350 330 L 350 655 L 370 655" />
+      <path className="circuit-path-base" d="M 1020 640 L 890 740 L 680 770 L 460 770 L 290 810 L 180 810" />
+
+      {/* Active Glowing Pulses flowing along the tracks across negative space */}
+      {animated && (
+        <g className="active-pulses-group">
+          <path className="circuit-pulse-stream pulse-flow-1" d="M 1197 437 L 1120 410 L 960 380 L 820 350 L 640 330 L 440 330 L 370 330" />
+          <path className="circuit-pulse-stream pulse-flow-2" d="M 1197 437 L 1110 435 L 940 435 L 780 410 L 590 395 L 430 395 L 370 395" />
+          <path className="circuit-pulse-stream pulse-flow-3" d="M 1197 437 L 1110 455 L 950 475 L 770 475 L 580 460 L 430 460 L 370 460" />
+          <path className="circuit-pulse-stream pulse-flow-4" d="M 1197 437 L 1130 475 L 980 525 L 820 540 L 620 525 L 440 525 L 370 525" />
+          <path className="circuit-pulse-stream pulse-flow-5" d="M 1197 437 L 1140 495 L 1000 580 L 840 600 L 640 590 L 440 590 L 370 590" />
+          <path className="circuit-pulse-stream pulse-flow-6" d="M 1197 437 L 1150 515 L 1020 640 L 860 670 L 650 655 L 440 655 L 370 655" />
+          <path className="circuit-pulse-stream pulse-flow-ambient1" d="M 960 380 L 760 270 L 520 220 L 320 220 L 220 180 L 140 180" />
+          <path className="circuit-pulse-stream pulse-flow-ambient2" d="M 1020 640 L 890 740 L 680 770 L 460 770 L 290 810 L 180 810" />
+        </g>
+      )}
+
+      {/* Terminal & Junction Nodes in Negative Space */}
+      <circle className="circuit-terminal-node" cx="370" cy="330" r="3.5" />
+      <circle className="circuit-terminal-node" cx="370" cy="395" r="3.5" />
+      <circle className="circuit-terminal-node" cx="370" cy="460" r="3.5" />
+      <circle className="circuit-terminal-node" cx="370" cy="525" r="3.5" />
+      <circle className="circuit-terminal-node" cx="370" cy="590" r="3.5" />
+      <circle className="circuit-terminal-node" cx="370" cy="655" r="3.5" />
+
+      {/* Negative space test pads */}
+      <circle className="circuit-test-pad pad-1" cx="640" cy="330" r="3" />
+      <circle className="circuit-test-pad pad-2" cx="780" cy="410" r="3" />
+      <circle className="circuit-test-pad pad-3" cx="580" cy="460" r="3" />
+      <circle className="circuit-test-pad pad-4" cx="820" cy="540" r="3" />
+      <circle className="circuit-test-pad pad-5" cx="320" cy="220" r="3" />
+      <circle className="circuit-test-pad pad-6" cx="140" cy="180" r="3" />
+      <circle className="circuit-test-pad pad-7" cx="160" cy="290" r="3" />
+      <circle className="circuit-test-pad pad-8" cx="460" cy="770" r="3" />
+      <circle className="circuit-test-pad pad-9" cx="180" cy="810" r="3" />
+    </svg>
+  )
+}
+
+function SettingsModal({
+  isOpen,
+  settings,
+  onUpdateSettings,
+  onReplayBoot,
+  onClose,
+}: {
+  isOpen: boolean
+  settings: AppSettings
+  onUpdateSettings: (updater: (prev: AppSettings) => AppSettings) => void
+  onReplayBoot: () => void
+  onClose: () => void
+}) {
+  if (!isOpen) return null
+
+  const toggle = (key: keyof AppSettings) => {
+    playUiSound('toggle', settings)
+    onUpdateSettings((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  const resetDefaults = () => {
+    playUiSound('toggle', settings)
+    onUpdateSettings(() => DEFAULT_SETTINGS)
+  }
+
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal-card settings-modal-card" role="dialog" aria-modal="true">
+        <div className="modal-head settings-modal-head">
+          <div className="settings-head-title">
+            <span className="eyebrow">SYSTEM CONFIGURATION</span>
+            <h2>Fixora Lab Settings</h2>
+          </div>
+          <button className="icon-button" onClick={onClose} aria-label="Close settings">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="settings-modal-body">
+          {/* Section 1: Visual & Motion */}
+          <div className="settings-section">
+            <div className="settings-section-head">
+              <Sparkles size={16} />
+              <h3>Visual FX & Animations</h3>
+            </div>
+
+            <div className="settings-row">
+              <div className="settings-text">
+                <span className="settings-label">Enable Animations & Circuit FX</span>
+                <span className="settings-desc">Master toggle for background neon circuit traces, laser scanline, radar ripples, and button micro-interactions.</span>
+              </div>
+              <label className="switch-label">
+                <input
+                  type="checkbox"
+                  className="switch-input"
+                  checked={settings.animationsEnabled}
+                  onChange={() => toggle('animationsEnabled')}
+                />
+                <span className="switch-slider" />
+              </label>
+            </div>
+
+            <div className="settings-row">
+              <div className="settings-text">
+                <span className="settings-label">Live Telemetry Oscilloscope</span>
+                <span className="settings-desc">Display animated hardware frequency waveform & system telemetry in the HUD.</span>
+              </div>
+              <label className="switch-label">
+                <input
+                  type="checkbox"
+                  className="switch-input"
+                  checked={settings.hardwareTelemetry}
+                  onChange={() => toggle('hardwareTelemetry')}
+                />
+                <span className="switch-slider" />
+              </label>
+            </div>
+
+            <div className="settings-row">
+              <div className="settings-text">
+                <span className="settings-label">High-Contrast Glass HUD</span>
+                <span className="settings-desc">Enhances contrast and panel outlines for bright workshop lighting.</span>
+              </div>
+              <label className="switch-label">
+                <input
+                  type="checkbox"
+                  className="switch-input"
+                  checked={settings.highContrastHUD}
+                  onChange={() => toggle('highContrastHUD')}
+                />
+                <span className="switch-slider" />
+              </label>
+            </div>
+
+            <div className="settings-action-row">
+              <button
+                type="button"
+                className="button button-ghost button-sm"
+                onClick={() => {
+                  playUiSound('click', settings)
+                  onReplayBoot()
+                }}
+              >
+                <RotateCcw size={13} /> Replay Optical Calibration Sequence
+              </button>
+            </div>
+          </div>
+
+          {/* Section 2: AI & Diagnostic Engine */}
+          <div className="settings-section">
+            <div className="settings-section-head">
+              <Cpu size={16} />
+              <h3>AI & Reasoning Engine</h3>
+            </div>
+
+            <div className="settings-row">
+              <div className="settings-text">
+                <span className="settings-label">Diagnostics Inference Model</span>
+                <span className="settings-desc">Choose between live Gemma 4 reasoning API or offline heuristic rules.</span>
+              </div>
+              <select
+                className="settings-select"
+                value={settings.modelEngine}
+                onChange={(e) => {
+                  playUiSound('toggle', settings)
+                  onUpdateSettings((prev) => ({ ...prev, modelEngine: e.target.value as 'gemma-4' | 'fallback-rules' }))
+                }}
+              >
+                <option value="gemma-4">Gemma 4 (26B Reasoning Matrix)</option>
+                <option value="fallback-rules">Rule-based Local Engine</option>
+              </select>
+            </div>
+
+            <div className="settings-row">
+              <div className="settings-text">
+                <span className="settings-label">Automatic AI Triage on Intake</span>
+                <span className="settings-desc">Instantly evaluate fault probability and generate test matrix when a device is registered.</span>
+              </div>
+              <label className="switch-label">
+                <input
+                  type="checkbox"
+                  className="switch-input"
+                  checked={settings.autoTriageOnCreate}
+                  onChange={() => toggle('autoTriageOnCreate')}
+                />
+                <span className="switch-slider" />
+              </label>
+            </div>
+
+            <div className="settings-row">
+              <div className="settings-text">
+                <span className="settings-label">Strict Safety Quarantine</span>
+                <span className="settings-desc">Enforce mandatory pause on thermal runaway or punctured battery hazards.</span>
+              </div>
+              <label className="switch-label">
+                <input
+                  type="checkbox"
+                  className="switch-input"
+                  checked={settings.strictSafety}
+                  onChange={() => toggle('strictSafety')}
+                />
+                <span className="switch-slider" />
+              </label>
+            </div>
+          </div>
+
+          {/* Section 3: Safety & Queue Prompts */}
+          <div className="settings-section">
+            <div className="settings-section-head">
+              <ShieldCheck size={16} />
+              <h3>Queue Safety & Handover</h3>
+            </div>
+
+            <div className="settings-row">
+              <div className="settings-text">
+                <span className="settings-label">Confirm Device Deletion</span>
+                <span className="settings-desc">Require confirmation prompt before permanently deleting any repair record.</span>
+              </div>
+              <label className="switch-label">
+                <input
+                  type="checkbox"
+                  className="switch-input"
+                  checked={settings.confirmDelete}
+                  onChange={() => toggle('confirmDelete')}
+                />
+                <span className="switch-slider" />
+              </label>
+            </div>
+
+            <div className="settings-row">
+              <div className="settings-text">
+                <span className="settings-label">Confirm Repair Completion</span>
+                <span className="settings-desc">Require confirmation before setting a device as completed and archiving to memory.</span>
+              </div>
+              <label className="switch-label">
+                <input
+                  type="checkbox"
+                  className="switch-input"
+                  checked={settings.confirmComplete}
+                  onChange={() => toggle('confirmComplete')}
+                />
+                <span className="switch-slider" />
+              </label>
+            </div>
+
+            <div className="settings-row">
+              <div className="settings-text">
+                <span className="settings-label">Auto-Archive Completed Repairs</span>
+                <span className="settings-desc">Keep the repair queue focused by filtering completed devices into Repair Memory.</span>
+              </div>
+              <label className="switch-label">
+                <input
+                  type="checkbox"
+                  className="switch-input"
+                  checked={settings.autoArchive}
+                  onChange={() => toggle('autoArchive')}
+                />
+                <span className="switch-slider" />
+              </label>
+            </div>
+          </div>
+
+          {/* Section 4: Audio Haptics */}
+          <div className="settings-section">
+            <div className="settings-section-head">
+              {settings.audioEffects ? <Volume2 size={16} /> : <VolumeX size={16} />}
+              <h3>Hardware Audio Feedback</h3>
+            </div>
+
+            <div className="settings-row">
+              <div className="settings-text">
+                <span className="settings-label">Synthesizer Audio Feedback</span>
+                <span className="settings-desc">Play clean browser-synthesized audio clicks on button presses and toggles.</span>
+              </div>
+              <label className="switch-label">
+                <input
+                  type="checkbox"
+                  className="switch-input"
+                  checked={settings.audioEffects}
+                  onChange={() => toggle('audioEffects')}
+                />
+                <span className="switch-slider" />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div className="modal-actions settings-modal-actions">
+          <button
+            type="button"
+            className="button button-ghost"
+            onClick={resetDefaults}
+          >
+            Restore Defaults
+          </button>
+          <button
+            type="button"
+            className="button button-primary"
+            onClick={() => {
+              playUiSound('click', settings)
+              onClose()
+            }}
+          >
+            Save & Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function NewRepairModal({
+  onClose,
+  onCreate,
+  busy,
+}: {
+  onClose: () => void
+  onCreate: (data: Record<string, string>) => Promise<void>
+  busy: boolean
+}) {
+  const [form, setForm] = useState({
+    device_category: 'Smartphone',
+    brand: '',
+    model: '',
+    issue_title: '',
+    symptoms: '',
+    priority: 'normal',
+    customer_contact: '',
+    estimated_minutes: '30',
+  })
   const [localError, setLocalError] = useState('')
   const setField = (key: string, value: string) => setForm((current) => ({ ...current, [key]: value }))
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setLocalError('')
     if (form.symptoms.trim().length < 5) {
-      setLocalError('Add a little more detail about the reported symptoms.')
+      setLocalError('Add more detail about the reported symptoms.')
       return
     }
     await onCreate(form)
   }
-  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-    <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="new-repair-title">
-      <div className="modal-head"><div><span className="eyebrow">WORK ORDER</span><h2 id="new-repair-title">Register a repair</h2><p>Capture what the customer reported. Diagnosis comes next.</p></div><button className="icon-button" type="button" onClick={onClose} aria-label="Close"><X size={18} /></button></div>
-      <form className="modal-form" onSubmit={submit}>
-        <div className="form-grid two-cols">
-          <label>Device category<select value={form.device_category} onChange={(e) => setField('device_category', e.target.value)}><option>Smartphone</option><option>Laptop</option><option>Desktop</option><option>Tablet</option><option>Other electronics</option></select></label>
-          <label>Priority<select value={form.priority} onChange={(e) => setField('priority', e.target.value)}><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select></label>
-          <label>Brand<input required maxLength={80} value={form.brand} onChange={(e) => setField('brand', e.target.value)} placeholder="e.g. Samsung" /></label>
-          <label>Model<input required maxLength={100} value={form.model} onChange={(e) => setField('model', e.target.value)} placeholder="e.g. Galaxy A54" /></label>
-          <label className="span-two">Reported issue<input required minLength={4} maxLength={160} value={form.issue_title} onChange={(e) => setField('issue_title', e.target.value)} placeholder="e.g. Charging disconnects intermittently" /></label>
-          <label className="span-two">Reported symptoms<textarea required minLength={5} rows={3} value={form.symptoms} onChange={(e) => setField('symptoms', e.target.value)} placeholder="What did the customer observe? What has not been checked yet?" /></label>
-          <label>Assigned technician<input value={form.assigned_to} onChange={(e) => setField('assigned_to', e.target.value)} placeholder="Unassigned" /></label>
-          <label>Customer reference <span className="label-muted">(optional)</span><input value={form.customer_reference} onChange={(e) => setField('customer_reference', e.target.value)} placeholder="Job card / reference only" /></label>
+
+  return (
+    <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="new-repair-title">
+        <div className="modal-head">
+          <div>
+            <h2 id="new-repair-title">Register device</h2>
+          </div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
         </div>
-        {localError && <div className="inline-error"><AlertCircle size={15} />{localError}</div>}
-        <div className="privacy-note"><ShieldCheck size={15} /><span>Use a job reference instead of sensitive customer details. Fixora stores only the information entered here.</span></div>
-        <div className="modal-actions"><button type="button" className="button button-ghost" onClick={onClose}>Cancel</button><button type="submit" className="button button-primary" disabled={busy}>{busy ? <LoaderCircle className="spin" size={16} /> : <Plus size={16} />} Create repair case</button></div>
-      </form>
+        <form className="modal-form" onSubmit={submit}>
+          <div className="form-grid two-cols">
+            <label>Device category
+              <select value={form.device_category} onChange={(e) => setField('device_category', e.target.value)}>
+                <option>Smartphone</option>
+                <option>Laptop</option>
+                <option>Desktop</option>
+                <option>Tablet</option>
+                <option>Other electronics</option>
+              </select>
+            </label>
+            <label>Priority
+              <select value={form.priority} onChange={(e) => setField('priority', e.target.value)}>
+                <option value="low">Low</option>
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
+            </label>
+            <label>Brand
+              <input required maxLength={80} value={form.brand} onChange={(e) => setField('brand', e.target.value)} placeholder="e.g. Samsung" />
+            </label>
+            <label>Model
+              <input required maxLength={100} value={form.model} onChange={(e) => setField('model', e.target.value)} placeholder="e.g. Galaxy A54" />
+            </label>
+            <label className="span-two">Reported issue
+              <input required minLength={4} maxLength={160} value={form.issue_title} onChange={(e) => setField('issue_title', e.target.value)} placeholder="e.g. Charging disconnects intermittently" />
+            </label>
+            <label className="span-two">Reported symptoms
+              <textarea required minLength={5} rows={3} value={form.symptoms} onChange={(e) => setField('symptoms', e.target.value)} placeholder="What was observed?" />
+            </label>
+            <label className="span-two">Customer contact <span className="label-muted">(phone or email)</span>
+              <input value={form.customer_contact} onChange={(e) => setField('customer_contact', e.target.value)} placeholder="+1 (555) 000-0000 or customer@example.com" />
+            </label>
+          </div>
+          {localError && <div className="inline-error"><AlertCircle size={15} />{localError}</div>}
+          <div className="modal-actions">
+            <button type="button" className="button button-ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className="button button-primary" disabled={busy}>
+              {busy ? <LoaderCircle className="spin" size={16} /> : <Plus size={16} />} Register device
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
-  </div>
+  )
+}
+
+/**
+ * Hero / Home Landing Page:
+ * Uses the pristine high-resolution hardware component image as background with interactive glowing circuit animations.
+ * Features video-game style minimalistic buttons in the open space.
+ */
+function HomePage({
+  onNavigate,
+  onNewRepair,
+  onOpenCredits,
+  onOpenSettings,
+  onQuit,
+  settings,
+}: {
+  onNavigate: (tab: NavId) => void
+  onNewRepair: () => void
+  onOpenCredits: () => void
+  onOpenSettings: () => void
+  onQuit: () => void
+  settings: AppSettings
+}) {
+  return (
+    <div className="home-hero-page">
+      {/* Pristine Lossless 1679x937 PNG Hardware Background Layer */}
+      <div className="home-bg-layer" />
+
+      {/* SVG Circuit Traces & Active Light Pulses spanning across the negative space */}
+      <CircuitMapOverlay animated={settings.animationsEnabled} />
+
+      {/* Sweeping Optical Laser Scanner Line */}
+      {settings.animationsEnabled && (
+        <div className="scanline-laser-beam" aria-hidden="true" />
+      )}
+
+      {/* Animated Circuit Pulses aligned with image traces */}
+      {settings.animationsEnabled && (
+        <div className="circuit-fx-overlay" aria-hidden="true">
+          {/* Concentric Radar Ping Ripples from SoC */}
+          <div className="radar-ripple ripple-1" />
+          <div className="radar-ripple ripple-2" />
+          <div className="radar-ripple ripple-3" />
+
+          {/* Core chip glow */}
+          <div className="circuit-pulse-core" />
+
+          {/* Diagnostic SMD LEDs blinking on PCB */}
+          <div className="smd-led smd-led-1" />
+          <div className="smd-led smd-led-2" />
+          <div className="smd-led smd-led-3" />
+          <div className="smd-led smd-led-4" />
+        </div>
+      )}
+
+      {/* Left side: Minimalistic Video Game Menu UI */}
+      <div className="game-hud-container">
+        <div className="game-hud-top">
+          <div className="game-hud-badge">
+            <span className="hud-blinker" />
+            <span>SYS.STATUS // ONLINE</span>
+          </div>
+          {settings.hardwareTelemetry && (
+            <div className="game-hud-telemetry">
+              <div className="oscilloscope-mini" aria-hidden="true">
+                <span className="telemetry-bar bar-1" />
+                <span className="telemetry-bar bar-2" />
+                <span className="telemetry-bar bar-3" />
+                <span className="telemetry-bar bar-4" />
+                <span className="telemetry-bar bar-5" />
+              </div>
+              <span>GEMMA 4 // REASONING MATRIX</span>
+            </div>
+          )}
+        </div>
+
+        <div className="game-title-wrap">
+          <div className="game-title-eyebrow">
+            <Zap size={14} className="hud-bolt" />
+            <span>ELECTRONICS REPAIR INTELLIGENCE</span>
+          </div>
+          <h1 className="game-main-title">
+            FIXORA<span className="game-title-dot">.AI</span>
+          </h1>
+          <p className="game-tagline">
+            Grounded diagnostic co-pilot for electronics repair & fault verification.
+          </p>
+        </div>
+
+        {/* Video Game Style Menu Buttons with Staggered Cascades */}
+        <nav className="game-menu-stack" aria-label="Main system menu">
+          <button
+            className="game-btn game-btn-primary"
+            style={{ '--btn-idx': 1 } as React.CSSProperties}
+            onClick={() => {
+              playUiSound('click', settings)
+              onNewRepair()
+            }}
+          >
+            <span className="game-btn-num">01</span>
+            <span className="game-btn-label">New Repair</span>
+            <span className="game-btn-bracket">]</span>
+          </button>
+
+          <button
+            className="game-btn"
+            style={{ '--btn-idx': 2 } as React.CSSProperties}
+            onClick={() => {
+              playUiSound('click', settings)
+              onNavigate('overview')
+            }}
+          >
+            <span className="game-btn-num">02</span>
+            <span className="game-btn-label">Overview</span>
+            <span className="game-btn-bracket">]</span>
+          </button>
+
+          <button
+            className="game-btn"
+            style={{ '--btn-idx': 3 } as React.CSSProperties}
+            onClick={() => {
+              playUiSound('click', settings)
+              onNavigate('cases')
+            }}
+          >
+            <span className="game-btn-num">03</span>
+            <span className="game-btn-label">Repair Queue</span>
+            <span className="game-btn-bracket">]</span>
+          </button>
+
+          <button
+            className="game-btn"
+            style={{ '--btn-idx': 4 } as React.CSSProperties}
+            onClick={() => {
+              playUiSound('click', settings)
+              onOpenSettings()
+            }}
+          >
+            <span className="game-btn-num">04</span>
+            <span className="game-btn-label">Settings</span>
+            <span className="game-btn-bracket">]</span>
+          </button>
+
+          <button
+            className="game-btn"
+            style={{ '--btn-idx': 5 } as React.CSSProperties}
+            onClick={() => {
+              playUiSound('click', settings)
+              onOpenCredits()
+            }}
+          >
+            <span className="game-btn-num">05</span>
+            <span className="game-btn-label">Credits</span>
+            <span className="game-btn-bracket">]</span>
+          </button>
+
+          <button
+            className="game-btn game-btn-quit"
+            style={{ '--btn-idx': 6 } as React.CSSProperties}
+            onClick={onQuit}
+          >
+            <span className="game-btn-num">06</span>
+            <span className="game-btn-label">Quit Site</span>
+            <span className="game-btn-bracket">]</span>
+          </button>
+        </nav>
+
+        <div className="game-hud-bottom">
+          <span className="hud-code-hint">
+            HACK DAY AT MICROSOFT // GEMMA 4 REPAIR COPILOT
+          </span>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function App() {
-  const [activeNav, setActiveNav] = useState<NavId>('overview')
+  // Application Settings & Visual Preferences
+  const [settings, setSettings] = useState<AppSettings>(() => {
+    try {
+      const raw = localStorage.getItem(SETTINGS_STORAGE_KEY)
+      if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }
+    } catch (e) {
+      console.warn('Failed reading settings from storage', e)
+    }
+    return DEFAULT_SETTINGS
+  })
+  const [showSettings, setShowSettings] = useState(false)
+  const [isBooting, setIsBooting] = useState(() => {
+    return !sessionStorage.getItem('fixora_booted_session')
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
+    } catch (e) {
+      console.warn('Failed saving settings to storage', e)
+    }
+
+    const body = document.body
+    if (!settings.animationsEnabled) {
+      body.classList.add('no-animations')
+    } else {
+      body.classList.remove('no-animations')
+    }
+
+    if (settings.highContrastHUD) {
+      body.classList.add('high-contrast-hud')
+    } else {
+      body.classList.remove('high-contrast-hud')
+    }
+  }, [settings])
+
+  // Default to 'home' landing page
+  const [activeNav, setActiveNav] = useState<NavId>('home')
+  const [diagnosticsTab, setDiagnosticsTab] = useState<'evidence' | 'recommendation'>('evidence')
   const [cases, setCases] = useState<RepairCase[]>([])
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null)
   const [health, setHealth] = useState<Health | null>(null)
@@ -133,40 +1149,106 @@ export default function App() {
   const [casePriorityFilter, setCasePriorityFilter] = useState('all')
   const [memoryQuery, setMemoryQuery] = useState('')
   const [showNewRepair, setShowNewRepair] = useState(false)
+  const [showCredits, setShowCredits] = useState(false)
+  const [showStandby, setShowStandby] = useState(false)
   const [busy, setBusy] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [recordingTest, setRecordingTest] = useState(false)
   const [recordingOutcome, setRecordingOutcome] = useState(false)
   const [notice, setNotice] = useState<Notice>(null)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [testForm, setTestForm] = useState({ test_name: testSuggestions[0], result: 'inconclusive' as TestStatus, observed_result: '', details: '' })
-  const [outcomeForm, setOutcomeForm] = useState({ confirmed_fault: '', repair_action: '', outcome: '', status: 'completed' as 'testing' | 'completed' | 'in_repair' })
+
+  // Direct tab close handler with fallback to standby terminal
+  function handleQuitSite() {
+    playUiSound('click', settings)
+    try {
+      window.close()
+    } catch (e) {
+      console.warn('Direct close blocked:', e)
+    }
+    try {
+      const win = window.open('', '_self')
+      if (win) win.close()
+    } catch (e) {
+      console.warn('Self close blocked:', e)
+    }
+    // Modern browsers often block tab closure for non-script-opened tabs
+    setTimeout(() => {
+      setShowStandby(true)
+    }, 120)
+  }
+
+  // Modals for confirmation
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; caseId: string; name: string }>({
+    isOpen: false,
+    caseId: '',
+    name: '',
+  })
+  const [completeModal, setCompleteModal] = useState<{
+    isOpen: boolean
+    caseId: string
+    action: () => Promise<void>
+  }>({
+    isOpen: false,
+    caseId: '',
+    action: async () => {},
+  })
+
+  const [testForm, setTestForm] = useState({
+    test_name: testSuggestions[0],
+    result: 'inconclusive' as TestStatus,
+    observed_result: '',
+    details: '',
+  })
+  const [outcomeForm, setOutcomeForm] = useState({
+    confirmed_fault: '',
+    repair_action: '',
+    outcome: '',
+    status: 'completed' as 'testing' | 'completed' | 'in_repair',
+  })
 
   async function loadAll() {
-    const [healthResult, casesResult, dashboardResult, knowledgeResult] = await Promise.allSettled([api.health(), api.cases(), api.dashboard(), api.knowledge()])
+    const [healthResult, casesResult, dashboardResult, knowledgeResult] = await Promise.allSettled([
+      api.health(),
+      api.cases(),
+      api.dashboard(),
+      api.knowledge(),
+    ])
     if (healthResult.status === 'fulfilled') setHealth(healthResult.value)
     if (casesResult.status === 'fulfilled') {
       setCases(casesResult.value)
-      setSelectedId((current) => current && casesResult.value.some((item) => item.id === current) ? current : (casesResult.value.find((item) => item.id === 'FX-1048')?.id || casesResult.value[0]?.id || ''))
+      setSelectedId((current) =>
+        current && casesResult.value.some((item) => item.id === current)
+          ? current
+          : casesResult.value.find((item) => item.status !== 'completed')?.id || casesResult.value[0]?.id || ''
+      )
     }
     if (dashboardResult.status === 'fulfilled') setDashboard(dashboardResult.value)
     if (knowledgeResult.status === 'fulfilled') {
       setKnowledge(knowledgeResult.value.sources)
       setKnowledgeNotice(knowledgeResult.value.notice)
     }
-    const failures = [healthResult, casesResult, dashboardResult, knowledgeResult].filter((result) => result.status === 'rejected')
-    if (failures.length && casesResult.status === 'rejected') setNotice({ kind: 'error', text: errorMessage((casesResult as PromiseRejectedResult).reason) })
+    if (casesResult.status === 'rejected') {
+      setNotice({ kind: 'error', text: errorMessage((casesResult as PromiseRejectedResult).reason) })
+    }
   }
 
   async function refreshLists() {
-    const [casesResult, dashboardResult, healthResult] = await Promise.all([api.cases(), api.dashboard(), api.health()])
+    const [casesResult, dashboardResult, healthResult] = await Promise.all([
+      api.cases(),
+      api.dashboard(),
+      api.health(),
+    ])
     setCases(casesResult)
     setDashboard(dashboardResult)
     setHealth(healthResult)
   }
 
   async function loadDetail(id: string) {
-    if (!id) { setSelectedDetail(null); setRecommendation(null); return }
+    if (!id) {
+      setSelectedDetail(null)
+      setRecommendation(null)
+      return
+    }
     try {
       const detail = await api.caseDetail(id)
       setSelectedDetail(detail)
@@ -199,20 +1281,70 @@ export default function App() {
         issue_title: form.issue_title,
         symptoms: form.symptoms,
         priority: form.priority,
-        assigned_to: form.assigned_to || 'Unassigned',
-        customer_reference: form.customer_reference || undefined,
+        customer_contact: form.customer_contact || undefined,
         estimated_minutes: form.estimated_minutes ? Number(form.estimated_minutes) : null,
       })
       setShowNewRepair(false)
       setSelectedId(created.id)
       setActiveNav('diagnostics')
+      setDiagnosticsTab('evidence')
       await refreshLists()
-      flash('success', `${created.id} created. Next, record the diagnostic evidence.`)
+      flash('success', `${created.brand} ${created.model} (${created.id}) registered.`)
+
+      // Automatic AI Triage if enabled in Settings
+      if (settings.autoTriageOnCreate) {
+        setGenerating(true)
+        void api.recommendation(created.id)
+          .then((rec) => {
+            setRecommendation(rec)
+            void loadDetail(created.id)
+            flash('success', 'Automatic AI recommendation generated.')
+          })
+          .catch((err) => console.warn('Auto triage error:', err))
+          .finally(() => setGenerating(false))
+      }
     } catch (error) {
       flash('error', errorMessage(error))
     } finally {
       setBusy(false)
     }
+  }
+
+  async function performDeleteDevice(caseId: string) {
+    setBusy(true)
+    try {
+      await api.deleteCase(caseId)
+      setDeleteModal({ isOpen: false, caseId: '', name: '' })
+      flash('success', `Device ${caseId} deleted.`)
+      await refreshLists()
+      if (selectedId === caseId) {
+        const remaining = cases.filter((c) => c.id !== caseId)
+        setSelectedId(remaining[0]?.id || '')
+      }
+    } catch (error) {
+      flash('error', errorMessage(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function promptDeleteDevice(caseId: string, brand: string, model: string) {
+    playUiSound('click', settings)
+    if (!settings.confirmDelete) {
+      void performDeleteDevice(caseId)
+      return
+    }
+    setDeleteModal({
+      isOpen: true,
+      caseId,
+      name: `${brand} ${model}`.trim() || caseId,
+    })
+  }
+
+  async function confirmDeleteDevice() {
+    const { caseId } = deleteModal
+    if (!caseId) return
+    await performDeleteDevice(caseId)
   }
 
   async function addTest(event: FormEvent<HTMLFormElement>) {
@@ -225,10 +1357,12 @@ export default function App() {
       setRecommendation(null)
       await refreshLists()
       await loadDetail(selectedDetail.id)
-      flash('success', 'Test result saved to the repair record.')
+      flash('success', 'Test result recorded.')
     } catch (error) {
       flash('error', errorMessage(error))
-    } finally { setRecordingTest(false) }
+    } finally {
+      setRecordingTest(false)
+    }
   }
 
   async function generateRecommendation() {
@@ -239,159 +1373,1892 @@ export default function App() {
       setRecommendation(result)
       await refreshLists()
       await loadDetail(selectedDetail.id)
-      // loadDetail retrieves the same persisted recommendation; retain the similar-case matches from this response.
-      setRecommendation((current) => current ? { ...current, similar_cases: result.similar_cases } : result)
-      flash('success', result.provider === 'gemini_api' ? 'Gemma recommendation generated and saved.' : 'Guidance generated using the clearly labelled local fallback.')
+      setRecommendation((current) => (current ? { ...current, similar_cases: result.similar_cases } : result))
+      flash('success', result.provider === 'gemini_api' ? 'Gemma recommendation generated.' : 'Guidance generated using local rules.')
     } catch (error) {
       flash('error', errorMessage(error))
-    } finally { setGenerating(false) }
+    } finally {
+      setGenerating(false)
+    }
   }
 
-  async function saveOutcome(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  async function executeSaveOutcome() {
     if (!selectedDetail) return
     setRecordingOutcome(true)
     try {
       await api.outcome(selectedDetail.id, outcomeForm)
       await refreshLists()
       await loadDetail(selectedDetail.id)
-      flash('success', 'Technician-confirmed outcome saved to repair memory.')
+      flash('success', outcomeForm.status === 'completed' ? 'Case marked completed and moved to Repair Memory.' : 'Repair outcome saved.')
     } catch (error) {
       flash('error', errorMessage(error))
-    } finally { setRecordingOutcome(false) }
+    } finally {
+      setRecordingOutcome(false)
+    }
   }
 
-  async function updateStatus(caseId: string, status: CaseStatus) {
+  function handleSaveOutcome(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selectedDetail) return
+    playUiSound('click', settings)
+    if (outcomeForm.status === 'completed' && settings.confirmComplete) {
+      setCompleteModal({
+        isOpen: true,
+        caseId: selectedDetail.id,
+        action: executeSaveOutcome,
+      })
+    } else {
+      void executeSaveOutcome()
+    }
+  }
+
+  async function executeUpdateStatus(caseId: string, status: CaseStatus) {
     try {
       await api.updateCase(caseId, { status })
       await refreshLists()
       if (selectedId === caseId) await loadDetail(caseId)
       flash('success', `Case ${caseId} moved to ${statusNames[status]}.`)
-    } catch (error) { flash('error', errorMessage(error)) }
+    } catch (error) {
+      flash('error', errorMessage(error))
+    }
   }
 
-  const visibleCases = useMemo(() => cases.filter((item) => {
-    const matchesQuery = !query || `${item.id} ${item.brand} ${item.model} ${item.issue_title} ${item.symptoms} ${item.confirmed_fault || ''}`.toLowerCase().includes(query.toLowerCase())
-    const matchesStatus = caseStatusFilter === 'all' || item.status === caseStatusFilter
-    const matchesPriority = casePriorityFilter === 'all' || item.priority === casePriorityFilter
-    return matchesQuery && matchesStatus && matchesPriority
-  }), [cases, query, caseStatusFilter, casePriorityFilter])
+  function handleStatusChange(caseId: string, status: CaseStatus) {
+    playUiSound('click', settings)
+    if (status === 'completed' && settings.confirmComplete) {
+      setCompleteModal({
+        isOpen: true,
+        caseId,
+        action: () => executeUpdateStatus(caseId, status),
+      })
+    } else {
+      void executeUpdateStatus(caseId, status)
+    }
+  }
 
-  const memoryCases = useMemo(() => cases.filter((item) => {
+  // Active queue cases (Filtered if autoArchive is enabled)
+  const activeQueueCases = useMemo(
+    () => (settings.autoArchive ? cases.filter((item) => item.status !== 'completed') : cases),
+    [cases, settings.autoArchive]
+  )
+
+  const visibleQueueCases = useMemo(() => {
+    return activeQueueCases.filter((item) => {
+      const matchesQuery =
+        !query ||
+        `${item.id} ${item.brand} ${item.model} ${item.issue_title} ${item.symptoms} ${item.customer_contact || ''}`
+          .toLowerCase()
+          .includes(query.toLowerCase())
+      const matchesStatus = caseStatusFilter === 'all' || item.status === caseStatusFilter
+      const matchesPriority = casePriorityFilter === 'all' || item.priority === casePriorityFilter
+      return matchesQuery && matchesStatus && matchesPriority
+    })
+  }, [activeQueueCases, query, caseStatusFilter, casePriorityFilter])
+
+  const memoryCases = useMemo(() => {
     const queryText = memoryQuery.toLowerCase().trim()
-    return item.status === 'completed' && item.confirmed_fault && (!queryText || `${item.id} ${item.brand} ${item.model} ${item.issue_title} ${item.confirmed_fault} ${item.repair_action || ''} ${item.outcome || ''}`.toLowerCase().includes(queryText))
-  }).sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()), [cases, memoryQuery])
+    return cases
+      .filter(
+        (item) =>
+          item.status === 'completed' &&
+          item.confirmed_fault &&
+          (!queryText ||
+            `${item.id} ${item.brand} ${item.model} ${item.issue_title} ${item.confirmed_fault} ${item.repair_action || ''} ${item.outcome || ''}`
+              .toLowerCase()
+              .includes(queryText))
+      )
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+  }, [cases, memoryQuery])
 
   const selected = selectedDetail
-  const staleRecommendation = Boolean(recommendation && selected?.tests.length && recommendation.generated_at && new Date(selected.tests[selected.tests.length - 1].performed_at) > new Date(recommendation.generated_at))
-  const currentTitle = navItems.find((item) => item.id === activeNav)?.label || 'Overview'
+  const staleRecommendation = Boolean(
+    recommendation &&
+      selected?.tests.length &&
+      recommendation.generated_at &&
+      new Date(selected.tests[selected.tests.length - 1].performed_at) > new Date(recommendation.generated_at)
+  )
+
   const aiActive = Boolean(health?.model_configured)
 
   function openCase(id: string, tab: NavId = 'diagnostics') {
     setSelectedId(id)
     setActiveNav(tab)
-    setMobileMenuOpen(false)
   }
 
-  return <div className="app-shell">
-    <aside className={`sidebar ${mobileMenuOpen ? 'sidebar-open' : ''}`}>
-      <div className="brand-lockup"><div className="brand-mark"><Zap size={20} fill="currentColor" strokeWidth={2.4} /></div><div className="brand-copy"><span>fixora<span className="brand-ai">.ai</span></span><small>REPAIR INTELLIGENCE</small></div><button className="mobile-close icon-button" onClick={() => setMobileMenuOpen(false)} aria-label="Close menu"><X size={17} /></button></div>
-      <div className="workspace-switcher"><div className="workspace-avatar"><Wrench size={16} /></div><div className="workspace-meta"><strong>Workshop One</strong><span>Repair workspace</span></div><ChevronDown size={15} className="muted-icon" /></div>
-      {['WORKSPACE', 'INTELLIGENCE'].map((group) => <div className="nav-group" key={group}><p className="nav-group-label">{group}</p>{navItems.filter((item) => item.group === group).map((item) => {
-        const Icon = item.icon
-        return <button key={item.id} className={`nav-link ${activeNav === item.id ? 'active' : ''}`} onClick={() => { setActiveNav(item.id); setMobileMenuOpen(false) }}><Icon size={18} strokeWidth={activeNav === item.id ? 2.2 : 1.8} /><span>{item.label}</span>{item.id === 'cases' && dashboard?.needs_attention ? <span className="nav-count">{dashboard.needs_attention}</span> : null}</button>
-      })}</div>)}
-      <div className="sidebar-bottom">
-        <div className="sidebar-ai-card"><div className="ai-orb"><Sparkles size={16} /></div><div><strong>Repair intelligence</strong><span>{aiActive ? 'Gemma API key configured' : 'Demo guidance active'}</span></div><span className={`connection-dot ${aiActive ? 'online' : ''}`} /></div>
-        <div className="profile-row"><div className="profile-avatar">FX</div><div className="profile-meta"><strong>Workshop team</strong><span>Local workspace</span></div><button className="small-icon-button" onClick={() => setActiveNav('knowledge')} aria-label="Knowledge and settings"><CircleHelp size={16} /></button></div>
-      </div>
-    </aside>
+  const isHome = activeNav === 'home'
 
-    <main className="main-area">
-      <header className="topbar"><div className="topbar-left"><button className="mobile-menu icon-button" onClick={() => setMobileMenuOpen(true)} aria-label="Open menu"><Menu size={19} /></button><div className="breadcrumbs"><span>Workspace</span><ChevronRight size={14} /><strong>{currentTitle}</strong></div></div><div className="topbar-actions"><div className={`model-chip ${aiActive ? 'model-chip-online' : ''}`}><span className={`connection-dot ${aiActive ? 'online' : ''}`} />{aiActive ? 'Gemma configured' : 'Fallback mode'}</div><button className="topbar-icon" title="Refresh app data" onClick={() => { void refreshLists().then(() => flash('success', 'Workspace refreshed.')).catch((error) => flash('error', errorMessage(error))) }}><RefreshCw size={16} /></button><div className="topbar-avatar">WT</div></div></header>
-      {notice && <div className={`notice-bar notice-${notice.kind}`} role="status"><span className="notice-mark">{notice.kind === 'success' ? <CheckCircle2 size={16} /> : notice.kind === 'error' ? <AlertCircle size={16} /> : <Info size={16} />}</span><span>{notice.text}</span><button className="notice-close" onClick={() => setNotice(null)} aria-label="Dismiss notification"><X size={15} /></button></div>}
-      {health && !health.model_configured && <div className="fallback-banner"><Info size={15} /><span><strong>Demo guidance active.</strong> Add <code>GEMINI_API_KEY</code> to the backend <code>.env</code> file to enable {health.model_name}. Until then, recommendations come from explicit local rules—not an LLM.</span></div>}
-      <div className="page-content">
-        {activeNav === 'overview' && <OverviewPage dashboard={dashboard} cases={cases} health={health} onNew={() => setShowNewRepair(true)} onOpen={openCase} onNavigate={setActiveNav} />}
-        {activeNav === 'cases' && <CasesPage cases={visibleCases} query={query} setQuery={setQuery} statusFilter={caseStatusFilter} setStatusFilter={setCaseStatusFilter} priorityFilter={casePriorityFilter} setPriorityFilter={setCasePriorityFilter} onNew={() => setShowNewRepair(true)} onOpen={openCase} onStatus={updateStatus} />}
-        {activeNav === 'diagnostics' && <DiagnosticsPage selected={selected} cases={cases} recommendation={recommendation} health={health} stale={staleRecommendation} generating={generating} recordingTest={recordingTest} recordingOutcome={recordingOutcome} testForm={testForm} setTestForm={setTestForm} outcomeForm={outcomeForm} setOutcomeForm={setOutcomeForm} onSelect={(id) => setSelectedId(id)} onAddTest={addTest} onGenerate={generateRecommendation} onSaveOutcome={saveOutcome} onNew={() => setShowNewRepair(true)} onOpenCase={openCase} />}
-        {activeNav === 'memory' && <MemoryPage cases={memoryCases} query={memoryQuery} setQuery={setMemoryQuery} onOpen={openCase} />}
-        {activeNav === 'knowledge' && <KnowledgePage sources={knowledge} notice={knowledgeNotice} />}
-      </div>
-      <footer className="app-footer"><span><span className="footer-mark"><Zap size={10} fill="currentColor" /></span> Fixora AI <span className="footer-divider">/</span> Evidence-led repair workflow</span><span><LockKeyhole size={12} /> Local prototype · {health?.model_configured ? health.model_name : 'Gemma API not configured'}</span></footer>
-    </main>
-    {showNewRepair && <NewRepairModal onClose={() => setShowNewRepair(false)} onCreate={createRepair} busy={busy} />}
-  </div>
-}
+  return (
+    <div className={`app-shell ${isHome ? 'home-layout' : 'dock-layout'}`}>
+      {/* Sleek minimal top strip - HIDDEN on HomePage */}
+      {!isHome && (
+        <header className="app-top-strip">
+          <div className="app-brand" onClick={() => setActiveNav('home')}>
+            <div className="brand-mark">
+              <Zap size={18} fill="currentColor" strokeWidth={2.4} />
+            </div>
+            <span className="brand-name">fixora<span className="brand-ai">.ai</span></span>
+          </div>
 
-function OverviewPage({ dashboard, cases, health, onNew, onOpen, onNavigate }: {
-  dashboard: DashboardSummary | null; cases: RepairCase[]; health: Health | null; onNew: () => void; onOpen: (id: string, tab?: NavId) => void; onNavigate: (tab: NavId) => void
-}) {
-  const recentCases = dashboard?.recent_cases || cases.slice(0, 6)
-  const urgent = cases.filter((item) => item.priority === 'urgent' && item.status !== 'completed')
-  return <>
-    <div className="page-heading heading-overview"><div><div className="eyebrow-row"><span className="eyebrow">{currentDateHeading()}</span><span className="eyebrow-divider" /><span className="eyebrow-muted">WORKSHOP PULSE</span></div><h1>Good morning, team <span className="heading-sparkle">✳</span></h1><p className="page-subtitle">A clearer view of every repair, from the first symptom to the final check.</p></div><button className="button button-primary" onClick={onNew}><Plus size={17} /> New repair <span className="shortcut">N</span></button></div>
-    <section className="hero-panel"><div className="hero-copy"><div className="hero-pill"><Sparkles size={13} /> REPAIR INTELLIGENCE, NOT GUESSWORK</div><h2>Make every diagnostic<br /><span>step count.</span></h2><p>Connect real test results to the next useful check, then save what worked for the next repair.</p><button className="button button-light" onClick={() => onNavigate('diagnostics')}>Open diagnostics <ArrowRight size={16} /></button><div className="hero-trust"><ShieldCheck size={14} /><span>Technician-confirmed outcomes. AI-assisted decisions.</span></div></div><div className="hero-graphic" aria-hidden="true"><div className="orbit orbit-one" /><div className="orbit orbit-two" /><div className="orbit orbit-three" /><div className="graphic-center"><div className="graphic-icon"><Cpu size={33} /></div><span>FIXORA CORE</span></div><div className="floating-node node-a"><Activity size={16} /><span>Evidence</span></div><div className="floating-node node-b"><BrainCircuit size={17} /><span>Reasoning</span></div><div className="floating-node node-c"><CheckCircle2 size={16} /><span>Outcome</span></div><div className="graphic-line line-a" /><div className="graphic-line line-b" /></div></section>
-    <div className="stats-grid">
-      <StatCard icon={Wrench} label="Active repairs" value={dashboard?.active_repairs ?? '—'} detail="Across current queue" tone="blue" trend={null} onClick={() => onNavigate('cases')} />
-      <StatCard icon={ClipboardCheck} label="Ready for testing" value={dashboard?.ready_for_testing ?? '—'} detail="Final verification stage" tone="green" trend={null} onClick={() => onNavigate('cases')} />
-      <StatCard icon={CheckCircle2} label="Completed this week" value={dashboard?.completed_this_week ?? '—'} detail="Updated in the last 7 days" tone="violet" trend={null} onClick={() => onNavigate('memory')} />
-      <StatCard icon={History} label="Repair memory" value={dashboard?.saved_cases ?? '—'} detail="Cases with outcomes & history" tone="amber" trend={null} onClick={() => onNavigate('memory')} />
+          <div className="top-strip-actions">
+            <div className={`model-chip ${aiActive ? 'model-chip-online' : ''}`}>
+              <span className={`connection-dot ${aiActive ? 'online' : ''}`} />
+              {aiActive ? health?.model_name || 'Gemma 4' : 'Local rules fallback'}
+            </div>
+            <button
+              className="topbar-icon"
+              title="Fixora Lab Settings"
+              onClick={() => {
+                playUiSound('click', settings)
+                setShowSettings(true)
+              }}
+            >
+              <Settings size={15} />
+            </button>
+            <button
+              className="topbar-icon"
+              title="Refresh app data"
+              onClick={() => {
+                playUiSound('click', settings)
+                void refreshLists()
+                  .then(() => flash('success', 'Refreshed.'))
+                  .catch((error) => flash('error', errorMessage(error)))
+              }}
+            >
+              <RefreshCw size={15} />
+            </button>
+          </div>
+        </header>
+      )}
+
+      {notice && !isHome && (
+        <div className={`notice-bar notice-${notice.kind}`} role="status">
+          <span className="notice-mark">
+            {notice.kind === 'success' ? <CheckCircle2 size={16} /> : notice.kind === 'error' ? <AlertCircle size={16} /> : <Info size={16} />}
+          </span>
+          <span>{notice.text}</span>
+          <button className="notice-close" onClick={() => setNotice(null)} aria-label="Dismiss notification">
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
+      {/* Main Content Area with Quick Page Transitions */}
+      <main className={isHome ? 'main-area-home' : 'main-area-full'}>
+        {isHome && (
+          <div key="home" className="page-transition-wrap">
+            <HomePage
+              onNavigate={(tab) => {
+                playUiSound('click', settings)
+                setActiveNav(tab)
+              }}
+              onNewRepair={() => {
+                playUiSound('click', settings)
+                setShowNewRepair(true)
+              }}
+              onOpenCredits={() => {
+                playUiSound('click', settings)
+                setShowCredits(true)
+              }}
+              onOpenSettings={() => {
+                playUiSound('click', settings)
+                setShowSettings(true)
+              }}
+              onQuit={handleQuitSite}
+              settings={settings}
+            />
+          </div>
+        )}
+
+        {!isHome && activeNav === 'overview' && (
+          <div key="overview" className="page-transition-wrap overview-fullscreen-wrap">
+            <OverviewPage
+              dashboard={dashboard}
+              cases={cases}
+              onOpen={openCase}
+              onNavigate={(tab) => {
+                playUiSound('click', settings)
+                setActiveNav(tab)
+              }}
+              settings={settings}
+              aiActive={aiActive}
+            />
+          </div>
+        )}
+
+        {!isHome && activeNav === 'cases' && (
+          <div key="cases" className="page-transition-wrap queue-fullscreen-wrap">
+            <CasesPage
+              cases={visibleQueueCases}
+              query={query}
+              setQuery={setQuery}
+              statusFilter={caseStatusFilter}
+              setStatusFilter={setCaseStatusFilter}
+              priorityFilter={casePriorityFilter}
+              setPriorityFilter={setCasePriorityFilter}
+              onNew={() => {
+                playUiSound('click', settings)
+                setShowNewRepair(true)
+              }}
+              onOpen={openCase}
+              onStatus={handleStatusChange}
+              onDelete={promptDeleteDevice}
+              settings={settings}
+            />
+          </div>
+        )}
+
+        {!isHome && activeNav === 'diagnostics' && (
+          <div key="diagnostics" className="page-transition-wrap diagnostics-fullscreen-wrap">
+            <DiagnosticsPage
+              selected={selected}
+              cases={activeQueueCases.length ? activeQueueCases : cases}
+              diagnosticsTab={diagnosticsTab}
+              setDiagnosticsTab={setDiagnosticsTab}
+              recommendation={recommendation}
+              health={health}
+              stale={staleRecommendation}
+              generating={generating}
+              recordingTest={recordingTest}
+              recordingOutcome={recordingOutcome}
+              testForm={testForm}
+              setTestForm={setTestForm}
+              outcomeForm={outcomeForm}
+              setOutcomeForm={setOutcomeForm}
+              onSelect={(id) => setSelectedId(id)}
+              onAddTest={addTest}
+              onGenerate={generateRecommendation}
+              onSaveOutcome={handleSaveOutcome}
+              onDelete={promptDeleteDevice}
+              onOpenCase={openCase}
+              settings={settings}
+            />
+          </div>
+        )}
+
+        {!isHome && activeNav !== 'overview' && activeNav !== 'cases' && activeNav !== 'diagnostics' && (
+          <div className="page-content">
+            <div key={activeNav} className="page-transition-wrap">
+              {activeNav === 'memory' && (
+                <MemoryPage
+                  cases={memoryCases}
+                  query={memoryQuery}
+                  setQuery={setMemoryQuery}
+                  onOpen={openCase}
+                  onDelete={promptDeleteDevice}
+                />
+              )}
+
+              {activeNav === 'knowledge' && (
+                <KnowledgePage sources={knowledge} notice={knowledgeNotice} />
+              )}
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* macOS Dock Navigation - HIDDEN on HomePage */}
+      {!isHome && (
+        <div className="mac-dock-container">
+          <nav className="mac-dock glass-dock" role="navigation" aria-label="macOS dock navigation">
+            {navItems.map((item) => {
+              const Icon = item.icon
+              const isActive = activeNav === item.id
+              const count = item.id === 'cases' ? activeQueueCases.length : null
+              return (
+                <button
+                  key={item.id}
+                  className={`dock-item ${isActive ? 'dock-item-active' : ''}`}
+                  onClick={() => {
+                    playUiSound('click', settings)
+                    setActiveNav(item.id)
+                  }}
+                  aria-label={item.label}
+                >
+                  <span className="dock-tooltip">{item.label}</span>
+                  <div className="dock-icon-wrap">
+                    <Icon size={22} strokeWidth={isActive ? 2.3 : 1.8} />
+                    {count !== null && count > 0 && <span className="dock-badge">{count}</span>}
+                  </div>
+                  {isActive && <span className="dock-active-dot" />}
+                </button>
+              )
+            })}
+            <div className="dock-divider" />
+            <button
+              className="dock-item"
+              onClick={() => {
+                playUiSound('click', settings)
+                setShowSettings(true)
+              }}
+              aria-label="Settings"
+            >
+              <span className="dock-tooltip">Settings</span>
+              <div className="dock-icon-wrap">
+                <Settings size={21} strokeWidth={1.8} />
+              </div>
+            </button>
+            <button
+              className="dock-item dock-item-action"
+              onClick={() => {
+                playUiSound('click', settings)
+                setShowNewRepair(true)
+              }}
+              aria-label="New repair"
+            >
+              <span className="dock-tooltip">New repair</span>
+              <div className="dock-icon-wrap">
+                <Plus size={22} strokeWidth={2.5} />
+              </div>
+            </button>
+          </nav>
+        </div>
+      )}
+
+      {/* Modals */}
+      <SettingsModal
+        isOpen={showSettings}
+        settings={settings}
+        onUpdateSettings={setSettings}
+        onReplayBoot={() => {
+          setShowSettings(false)
+          setActiveNav('home')
+          setIsBooting(true)
+        }}
+        onClose={() => setShowSettings(false)}
+      />
+
+      {isHome && isBooting && (
+        <LightDiagnosticAwakening
+          enabled={settings.animationsEnabled}
+          settings={settings}
+          onComplete={() => {
+            setIsBooting(false)
+            sessionStorage.setItem('fixora_booted_session', 'true')
+          }}
+        />
+      )}
+
+      {showNewRepair && (
+        <NewRepairModal onClose={() => setShowNewRepair(false)} onCreate={createRepair} busy={busy} />
+      )}
+
+      <CreditsModal isOpen={showCredits} onClose={() => setShowCredits(false)} />
+
+      <StandbyModal isOpen={showStandby} onResume={() => setShowStandby(false)} settings={settings} />
+
+      <ConfirmModal
+        isOpen={deleteModal.isOpen}
+        title="Delete device?"
+        message={`Are you sure you want to delete ${deleteModal.name} (${deleteModal.caseId})? This action cannot be undone.`}
+        confirmText="Delete"
+        confirmTone="danger"
+        busy={busy}
+        onConfirm={confirmDeleteDevice}
+        onCancel={() => setDeleteModal({ isOpen: false, caseId: '', name: '' })}
+      />
+
+      <ConfirmModal
+        isOpen={completeModal.isOpen}
+        title="Mark device as completed?"
+        message={`Marking ${completeModal.caseId} as completed will archive the device into Repair Memory and remove it from the active repair queue.`}
+        confirmText="Mark completed"
+        confirmTone="primary"
+        busy={recordingOutcome}
+        onConfirm={async () => {
+          const action = completeModal.action
+          setCompleteModal({ isOpen: false, caseId: '', action: async () => {} })
+          await action()
+        }}
+        onCancel={() => setCompleteModal({ isOpen: false, caseId: '', action: async () => {} })}
+      />
     </div>
-    <div className="dashboard-columns"><section className="surface-card recent-card"><div className="section-card-head"><div><h3>Latest repair activity</h3><p>Keep a pulse on the workshop queue.</p></div><button className="text-action" onClick={() => onNavigate('cases')}>View all <ArrowRight size={14} /></button></div>{recentCases.length ? <div className="recent-table-wrap"><table className="data-table"><thead><tr><th>REPAIR</th><th>ISSUE</th><th>STATUS</th><th>PRIORITY</th><th>UPDATED</th><th /></tr></thead><tbody>{recentCases.slice(0, 6).map((item) => <tr key={item.id} onClick={() => onOpen(item.id)} className="clickable-row"><td><div className="repair-id-cell"><div className="device-avatar">{deviceInitials(item.device_category)}</div><div><strong>{item.id}</strong><span>{item.brand} {item.model}</span></div></div></td><td><div className="issue-cell"><strong>{item.issue_title}</strong>{item.data_origin === 'demo' && <OriginBadge origin={item.data_origin} />}</div></td><td><StatusPill status={item.status} /></td><td><PriorityPill priority={item.priority} /></td><td className="date-cell">{dateLabel(item.updated_at)}</td><td><ChevronRight size={15} className="row-chevron" /></td></tr>)}</tbody></table></div> : <EmptyState icon={Wrench} title="No repairs yet" description="Register your first repair to start building useful case history." />}<div className="table-mobile-list">{recentCases.slice(0, 6).map((item) => <button key={item.id} className="mobile-case-row" onClick={() => onOpen(item.id)}><div className="device-avatar">{deviceInitials(item.device_category)}</div><div className="mobile-case-copy"><strong>{item.id} · {item.issue_title}</strong><span>{item.brand} {item.model} · {titleCase(item.status)}</span></div><ChevronRight size={15} /></button>)}</div></section>
-      <aside className="right-column"><section className="surface-card signal-card"><div className="section-card-head"><div><h3>Attention needed</h3><p>Prioritize what needs a closer look.</p></div><span className="attention-icon"><AlertTriangle size={17} /></span></div>{urgent.length ? <div className="signal-list">{urgent.slice(0, 3).map((item) => <button key={item.id} className="signal-item" onClick={() => onOpen(item.id)}><span className="signal-bar" /><span className="signal-copy"><strong>{item.issue_title}</strong><small>{item.id} · {item.brand} {item.model}</small></span><ArrowUpRight size={15} /></button>)}</div> : <div className="calm-state"><CheckCircle2 size={17} /><span>No urgent repairs in the queue.</span></div>}<button className="subtle-link" onClick={() => onNavigate('cases')}>Review repair queue <ArrowRight size={14} /></button></section><section className="surface-card ai-status-card"><div className="ai-status-top"><div className="ai-mini-mark"><Sparkles size={16} /></div><span className={`mini-status ${health?.model_configured ? 'mini-status-live' : 'mini-status-demo'}`}><span className="connection-dot" />{health?.model_configured ? 'KEY CONFIGURED' : 'DEMO MODE'}</span></div><h3>Gemma diagnostic support</h3><p>{health?.model_configured ? `Recommendations are routed to ${health.model_name}.` : 'Add a Gemini API key to enable model-powered analysis. Local safety-first rules remain available.'}</p><div className="ai-status-divider" /><div className="ai-status-foot"><span><LockKeyhole size={13} /> API key stays server-side</span><button className="text-action" onClick={() => onNavigate('knowledge')}>Details <ArrowRight size={13} /></button></div></section></aside></div>
-    <div className="bottom-tip"><div className="tip-icon"><Lightbulb size={17} /></div><div><strong>Good records make better recommendations.</strong><span>Record what was actually tested, keep unknowns explicit, and confirm the final fault before closing a case.</span></div><button onClick={() => onNavigate('diagnostics')}>Try diagnostics <ArrowRight size={14} /></button></div>
-  </>
+  )
 }
 
-function StatCard({ icon: Icon, label, value, detail, tone, trend, onClick }: { icon: typeof Activity; label: string; value: string | number; detail: string; tone: string; trend: string | null; onClick: () => void }) {
-  return <button className="stat-card" onClick={onClick}><div className="stat-card-top"><div className={`stat-icon stat-icon-${tone}`}><Icon size={18} /></div>{trend && <span className="stat-trend"><ArrowUpRight size={13} />{trend}</span>}</div><div className="stat-value">{value}</div><div className="stat-label">{label}</div><div className="stat-detail">{detail}<ArrowDownRight size={13} /></div></button>
-}
-
-function CasesPage({ cases, query, setQuery, statusFilter, setStatusFilter, priorityFilter, setPriorityFilter, onNew, onOpen, onStatus }: {
-  cases: RepairCase[]; query: string; setQuery: (value: string) => void; statusFilter: string; setStatusFilter: (value: string) => void; priorityFilter: string; setPriorityFilter: (value: string) => void; onNew: () => void; onOpen: (id: string, tab?: NavId) => void; onStatus: (id: string, status: CaseStatus) => void
+function OverviewPage({
+  dashboard,
+  cases,
+  onOpen,
+  onNavigate,
+  settings,
+  aiActive,
+}: {
+  dashboard: DashboardSummary | null
+  cases: RepairCase[]
+  onOpen: (id: string, tab?: NavId) => void
+  onNavigate: (tab: NavId) => void
+  settings: AppSettings
+  aiActive?: boolean
 }) {
-  return <><div className="page-heading"><div><span className="eyebrow">WORKSPACE / OPERATIONS</span><h1>Repair queue</h1><p className="page-subtitle">Every open job, with a clear next step and a traceable record.</p></div><button className="button button-primary" onClick={onNew}><Plus size={16} /> New repair</button></div><div className="queue-summary"><div className="queue-summary-cell"><span className="queue-summary-icon"><Layers3 size={15} /></span><div><strong>{cases.length}</strong><span>Matching cases</span></div></div><div className="queue-summary-cell"><span className="queue-summary-icon queue-summary-green"><CheckCircle2 size={15} /></span><div><strong>{cases.filter((item) => item.status === 'testing').length}</strong><span>In testing</span></div></div><div className="queue-summary-cell"><span className="queue-summary-icon queue-summary-red"><AlertTriangle size={15} /></span><div><strong>{cases.filter((item) => ['high', 'urgent'].includes(item.priority) && item.status !== 'completed').length}</strong><span>High priority</span></div></div></div><div className="surface-card queue-card"><div className="queue-toolbar"><div className="search-box"><Search size={16} /><input aria-label="Search repair queue" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search ID, device, issue, fault..." />{query && <button onClick={() => setQuery('')} aria-label="Clear search"><X size={14} /></button>}</div><div className="filter-controls"><label className="filter-select"><Filter size={14} /><select aria-label="Filter by status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="all">All statuses</option><option value="new">New</option><option value="diagnosing">Diagnosing</option><option value="waiting_parts">Waiting for parts</option><option value="in_repair">In repair</option><option value="testing">Testing</option><option value="completed">Completed</option><option value="on_hold">On hold</option></select><ChevronDown size={14} /></label><label className="filter-select"><select aria-label="Filter by priority" value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}><option value="all">All priorities</option><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select><ChevronDown size={14} /></label></div></div>{cases.length ? <div className="queue-table-wrap"><table className="data-table queue-table"><thead><tr><th>REPAIR ID / DEVICE</th><th>ISSUE</th><th>STATUS</th><th>PRIORITY</th><th>TECHNICIAN</th><th>LAST UPDATE</th><th /></tr></thead><tbody>{cases.map((item) => <tr key={item.id} className="clickable-row" onClick={() => onOpen(item.id)}><td><div className="repair-id-cell"><div className="device-avatar">{deviceInitials(item.device_category)}</div><div><strong>{item.id} <OriginBadge origin={item.data_origin} /></strong><span>{item.brand} {item.model}</span></div></div></td><td><div className="issue-cell"><strong>{item.issue_title}</strong><span className="issue-snippet">{item.symptoms}</span></div></td><td><div className="status-cell"><StatusPill status={item.status} /><select className="status-edit-select" aria-label={`Change status for ${item.id}`} value={item.status} onClick={(e) => e.stopPropagation()} onChange={(e) => onStatus(item.id, e.target.value as CaseStatus)}><option value="new">New</option><option value="diagnosing">Diagnosing</option><option value="waiting_parts">Waiting for parts</option><option value="in_repair">In repair</option><option value="testing">Testing</option><option value="completed">Completed</option><option value="on_hold">On hold</option></select></div></td><td><PriorityPill priority={item.priority} /></td><td><div className="tech-cell"><span className="tech-avatar">{initials(item.assigned_to)}</span>{item.assigned_to}</div></td><td className="date-cell">{dateTimeLabel(item.updated_at)}</td><td><button className="row-open-button" aria-label={`Open ${item.id}`} onClick={(e) => { e.stopPropagation(); onOpen(item.id) }}><ChevronRight size={16} /></button></td></tr>)}</tbody></table></div> : <EmptyState icon={PackageSearch} title="No matching repairs" description="Try a different search or clear the selected filters." />}<div className="queue-footer"><span>Showing {cases.length} repair {cases.length === 1 ? 'record' : 'records'}</span><span><span className="sample-key" /> Sample records are fictional demonstrations</span></div></div><div className="queue-note"><Info size={15} /><span>Repair statuses describe workflow progress. A generated hypothesis is not a confirmed fault; only close cases after documenting the technician's actual findings.</span></div></>
+  const urgent = cases.filter(
+    (item) => (item.priority === 'urgent' || item.priority === 'high') && item.status !== 'completed'
+  )
+
+  return (
+    <div className="overview-fullscreen-layout">
+      {/* Pristine Overview Hardware Background Layer */}
+      <div className="overview-bg-layer" />
+
+      {/* Atmospheric negative space soft daylight wash for contrast */}
+      <div className="overview-ambient-mask" aria-hidden="true" />
+
+      {/* Animated Circuit Streams spanning across negative space */}
+      <OverviewCircuitMapOverlay animated={settings.animationsEnabled} />
+
+      {/* Sweeping Optical Laser Scanner Line over Motherboard */}
+      {settings.animationsEnabled && (
+        <div className="overview-laser-scanner" aria-hidden="true" />
+      )}
+
+      {/* Hardware Cooling Fan Rotation & Convection Rings over Laptop Fan Hub */}
+      <OverviewFanOverlay animated={settings.animationsEnabled} />
+
+      {/* SMD Diagnostic Micro-LEDs on physical test points */}
+      <div className="overview-probes-layer" aria-hidden="true">
+        {OVERVIEW_TEST_POINTS.map((tp) => (
+          <div
+            key={tp.id}
+            className="overview-smd-probe"
+            style={{ right: tp.right, top: tp.top }}
+          >
+            <span
+              className={`probe-led ${settings.animationsEnabled ? 'pulsing' : ''}`}
+              style={{ backgroundColor: tp.color, boxShadow: `0 0 8px ${tp.color}` }}
+            />
+            {settings.animationsEnabled && (
+              <span
+                className="probe-ping"
+                style={{ borderColor: tp.color, animationDuration: tp.period }}
+              />
+            )}
+            <div className="probe-tooltip">
+              <span className="probe-code">{tp.code}</span>
+              <span className="probe-desc">{tp.label}</span>
+              <span className="probe-val" style={{ color: tp.color }}>{tp.status}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Minimalist Floating Glass HUD Container in Negative Space */}
+      <div className="overview-negative-hud">
+        <div className="overview-hud-header">
+          <div className="overview-telemetry-chip">
+            <span className={`overview-telemetry-dot ${aiActive ? 'online' : ''}`} />
+            <span>DIAGNOSTIC TELEMETRY // OVERVIEW</span>
+          </div>
+          <h1>Overview</h1>
+        </div>
+
+        {/* 2x2 Minimalist Glass Stat Cards */}
+        <div className="overview-glass-stats-grid">
+          <button
+            className="overview-glass-card card-tone-blue"
+            onClick={() => {
+              playUiSound('click', settings)
+              onNavigate('cases')
+            }}
+          >
+            <div className="glass-card-top">
+              <div className="glass-card-icon icon-blue">
+                <Activity size={17} />
+              </div>
+              <span className="glass-card-arrow"><ArrowRight size={13} /></span>
+            </div>
+            <div className="glass-card-val">{dashboard?.active_repairs ?? 0}</div>
+            <div className="glass-card-title">Active repairs</div>
+            <div className="glass-card-detail">Across current queue</div>
+          </button>
+
+          <button
+            className="overview-glass-card card-tone-green"
+            onClick={() => {
+              playUiSound('click', settings)
+              onNavigate('cases')
+            }}
+          >
+            <div className="glass-card-top">
+              <div className="glass-card-icon icon-green">
+                <ClipboardCheck size={17} />
+              </div>
+              <span className="glass-card-arrow"><ArrowRight size={13} /></span>
+            </div>
+            <div className="glass-card-val">{dashboard?.ready_for_testing ?? 0}</div>
+            <div className="glass-card-title">Ready for testing</div>
+            <div className="glass-card-detail">Final verification stage</div>
+          </button>
+
+          <button
+            className="overview-glass-card card-tone-violet"
+            onClick={() => {
+              playUiSound('click', settings)
+              onNavigate('memory')
+            }}
+          >
+            <div className="glass-card-top">
+              <div className="glass-card-icon icon-violet">
+                <CheckCircle2 size={17} />
+              </div>
+              <span className="glass-card-arrow"><ArrowRight size={13} /></span>
+            </div>
+            <div className="glass-card-val">{dashboard?.completed_this_week ?? 0}</div>
+            <div className="glass-card-title">Completed this week</div>
+            <div className="glass-card-detail">Updated in the last 7 days</div>
+          </button>
+
+          <button
+            className="overview-glass-card card-tone-amber"
+            onClick={() => {
+              playUiSound('click', settings)
+              onNavigate('memory')
+            }}
+          >
+            <div className="glass-card-top">
+              <div className="glass-card-icon icon-amber">
+                <History size={17} />
+              </div>
+              <span className="glass-card-arrow"><ArrowRight size={13} /></span>
+            </div>
+            <div className="glass-card-val">{dashboard?.saved_cases ?? 0}</div>
+            <div className="glass-card-title">Repair memory</div>
+            <div className="glass-card-detail">Cases with outcomes & history</div>
+          </button>
+        </div>
+
+        {/* Minimalist Glass Attention Needed Card */}
+        <section className="overview-glass-attention">
+          <div className="glass-attention-head">
+            <div className="glass-attention-title">
+              <span className="attention-indicator">
+                <AlertTriangle size={15} />
+              </span>
+              <h3>Attention needed</h3>
+            </div>
+            <span className={`attention-count-badge ${urgent.length > 0 ? 'badge-urgent' : 'badge-calm'}`}>
+              {urgent.length} {urgent.length === 1 ? 'ISSUE' : 'ISSUES'}
+            </span>
+          </div>
+
+          {urgent.length > 0 ? (
+            <div className="glass-signal-list">
+              {urgent.map((item) => (
+                <button
+                  key={item.id}
+                  className="glass-signal-item"
+                  onClick={() => {
+                    playUiSound('click', settings)
+                    onOpen(item.id, 'diagnostics')
+                  }}
+                >
+                  <span className="signal-bar-accent" />
+                  <div className="signal-item-copy">
+                    <strong className="signal-item-title">{item.issue_title}</strong>
+                    <span className="signal-item-meta">
+                      {item.id} · {item.brand} {item.model} · {statusNames[item.status]}
+                    </span>
+                  </div>
+                  <PriorityPill priority={item.priority} />
+                  <ArrowRight size={14} className="signal-item-arrow" />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="glass-calm-state">
+              <div className="calm-icon-wrap">
+                <CheckCircle2 size={16} />
+              </div>
+              <div className="calm-text-wrap">
+                <strong>No urgent repairs in queue</strong>
+                <small>All active devices operating on schedule.</small>
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  )
 }
 
-function DiagnosticsPage({ selected, cases, recommendation, health, stale, generating, recordingTest, recordingOutcome, testForm, setTestForm, outcomeForm, setOutcomeForm, onSelect, onAddTest, onGenerate, onSaveOutcome, onNew, onOpenCase }: {
-  selected: CaseDetail | null; cases: RepairCase[]; recommendation: Recommendation | null; health: Health | null; stale: boolean; generating: boolean; recordingTest: boolean; recordingOutcome: boolean;
-  testForm: { test_name: string; result: TestStatus; observed_result: string; details: string };
-  setTestForm: Dispatch<SetStateAction<{ test_name: string; result: TestStatus; observed_result: string; details: string }>>;
-  outcomeForm: { confirmed_fault: string; repair_action: string; outcome: string; status: 'testing' | 'completed' | 'in_repair' };
-  setOutcomeForm: Dispatch<SetStateAction<{ confirmed_fault: string; repair_action: string; outcome: string; status: 'testing' | 'completed' | 'in_repair' }>>;
-  onSelect: (id: string) => void; onAddTest: (event: FormEvent<HTMLFormElement>) => void; onGenerate: () => void; onSaveOutcome: (event: FormEvent<HTMLFormElement>) => void; onNew: () => void; onOpenCase: (id: string, tab?: NavId) => void
+const OVERVIEW_TEST_POINTS = [
+  {
+    id: 'tp-soc',
+    code: 'TP-102',
+    label: 'SOC / CONTROLLER',
+    status: '3.3V BUS NOMINAL',
+    color: '#42d9ad',
+    right: '34.7%',
+    top: '52.8%',
+    period: '1.8s',
+  },
+  {
+    id: 'tp-vrm',
+    code: 'TP-208',
+    label: 'VRM / MOSFET RAIL',
+    status: '1.15V STABLE',
+    color: '#f59e0b',
+    right: '17.6%',
+    top: '60.4%',
+    period: '2.4s',
+  },
+  {
+    id: 'tp-dram',
+    code: 'TP-314',
+    label: 'LPDDR5 BUS CLOCK',
+    status: '100MHz LOCKED',
+    color: '#38bdf8',
+    right: '23.8%',
+    top: '34.0%',
+    period: '1.4s',
+  },
+  {
+    id: 'tp-pd',
+    code: 'TP-409',
+    label: 'TYPE-C POWER DELIVERY',
+    status: '20V / 3.25A SINK',
+    color: '#10b981',
+    right: '11.9%',
+    top: '76.4%',
+    period: '2.1s',
+  },
+  {
+    id: 'tp-gnd',
+    code: 'TP-001',
+    label: 'CHASSIS GROUND PAD',
+    status: '0.00V REFERENCE',
+    color: '#6ee7b7',
+    right: '87.2%',
+    top: '89.2%',
+    period: '3.0s',
+  },
+]
+
+function OverviewCircuitMapOverlay({ animated }: { animated: boolean }) {
+  return (
+    <svg
+      className="overview-circuit-svg"
+      viewBox="0 0 1024 576"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id="ovPulseGrad" x1="1" y1="0.5" x2="0" y2="0.5">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="1" />
+          <stop offset="35%" stopColor="#43dfb9" stopOpacity="0.95" />
+          <stop offset="100%" stopColor="#1bb790" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+
+      {/* Base Circuit Tracks extending from motherboard chips across the negative space */}
+      <path className="ov-circuit-base" d="M 669 304 L 580 304 L 520 220 L 460 220 L 380 220" />
+      <path className="ov-circuit-base" d="M 669 304 L 560 340 L 490 340 L 440 370 L 380 370" />
+      <path className="ov-circuit-base" d="M 844 348 L 740 400 L 610 440 L 490 440 L 410 440" />
+      <path className="ov-circuit-base" d="M 780 196 L 680 150 L 540 150 L 430 150 L 360 150" />
+      <path className="ov-circuit-base" d="M 410 440 L 320 480 L 220 480 L 131 514" />
+      <path className="ov-circuit-base" d="M 220 480 L 130 430 L 59 430" />
+      <path className="ov-circuit-base" d="M 460 220 L 440 220 L 440 370 L 460 370" />
+
+      {/* Active Glowing Pulses flowing along tracks into the HUD */}
+      {animated && (
+        <g className="ov-pulses-group">
+          <path className="ov-circuit-pulse ov-flow-1" d="M 669 304 L 580 304 L 520 220 L 460 220 L 380 220" />
+          <path className="ov-circuit-pulse ov-flow-2" d="M 669 304 L 560 340 L 490 340 L 440 370 L 380 370" />
+          <path className="ov-circuit-pulse ov-flow-3" d="M 844 348 L 740 400 L 610 440 L 490 440 L 410 440" />
+          <path className="ov-circuit-pulse ov-flow-4" d="M 780 196 L 680 150 L 540 150 L 430 150 L 360 150" />
+          <path className="ov-circuit-pulse ov-flow-5" d="M 410 440 L 320 480 L 220 480 L 131 514" />
+          <path className="ov-circuit-pulse ov-flow-6" d="M 220 480 L 130 430 L 59 430" />
+        </g>
+      )}
+
+      {/* Micro junction pads */}
+      <circle className="ov-circuit-node" cx="669" cy="304" r="3" />
+      <circle className="ov-circuit-node" cx="520" cy="220" r="3" />
+      <circle className="ov-circuit-node" cx="440" cy="370" r="3" />
+      <circle className="ov-circuit-node" cx="490" cy="440" r="3" />
+      <circle className="ov-circuit-node" cx="131" cy="514" r="3.5" />
+      <circle className="ov-circuit-node" cx="59" cy="430" r="3" />
+    </svg>
+  )
+}
+
+function OverviewFanOverlay({ animated }: { animated: boolean }) {
+  return (
+    <div className="overview-fan-anchor" aria-hidden="true">
+      {animated && (
+        <>
+          <div className="overview-fan-ripple ov-ripple-1" />
+          <div className="overview-fan-ripple ov-ripple-2" />
+        </>
+      )}
+      <div className={`overview-fan-rotor ${animated ? 'spinning' : ''}`}>
+        <span className="fan-blade fb-1" />
+        <span className="fan-blade fb-2" />
+        <span className="fan-blade fb-3" />
+        <span className="fan-blade fb-4" />
+        <span className="fan-blade fb-5" />
+        <span className="fan-blade fb-6" />
+      </div>
+      <div className="overview-fan-hub">
+        <span className={`fan-hub-led ${animated ? 'active' : ''}`} />
+      </div>
+      <div className="overview-fan-telemetry">
+        <span className="fan-telemetry-pill">
+          <span className="fan-telemetry-dot" />
+          FAN: 3,420 RPM · 38°C
+        </span>
+      </div>
+    </div>
+  )
+}
+
+const QUEUE_TEST_POINTS = [
+  {
+    id: 'q-cam',
+    code: 'CAM-01',
+    label: 'IMAGE SENSOR / DUAL OIS',
+    status: 'OPTICAL FOCUS 100%',
+    color: '#38bdf8',
+    right: '15.0%',
+    top: '57.3%',
+    period: '2.0s',
+  },
+  {
+    id: 'q-pmic',
+    code: 'PMIC-1',
+    label: 'POWER MANAGEMENT IC',
+    status: 'VBAT: 3.82V CHARGING',
+    color: '#42d9ad',
+    right: '9.6%',
+    top: '52.1%',
+    period: '1.7s',
+  },
+  {
+    id: 'q-ap',
+    code: 'SOC-A16',
+    label: 'APPLICATION PROCESSOR',
+    status: 'LOGIC RAIL 1.10V OK',
+    color: '#f59e0b',
+    right: '5.5%',
+    top: '56.4%',
+    period: '2.3s',
+  },
+  {
+    id: 'q-batt',
+    code: 'BATT-0',
+    label: 'LI-ION CELL TELEMETRY',
+    status: 'HEALTH: 94% · 34°C',
+    color: '#10b981',
+    right: '4.5%',
+    top: '68.1%',
+    period: '1.9s',
+  },
+  {
+    id: 'q-tray',
+    code: 'TRAY-BIT',
+    label: 'TORX / PENTALOBE ARRAY',
+    status: 'TORX T2/T3/T4 STAGED',
+    color: '#a78bfa',
+    right: '13.7%',
+    top: '30.9%',
+    period: '2.8s',
+  },
+  {
+    id: 'q-ground',
+    code: 'GND-ESD',
+    label: 'ESD WORK MAT DISSIPATION',
+    status: '10^6 OHM SAFE',
+    color: '#2dd4bf',
+    right: '10.4%',
+    top: '84.2%',
+    period: '2.5s',
+  },
+]
+
+function QueueCircuitMapOverlay({ animated }: { animated: boolean }) {
+  return (
+    <svg
+      className="queue-circuit-svg"
+      viewBox="0 0 1024 576"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id="qPulseGrad" x1="0" y1="0.5" x2="1" y2="0.5">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="1" />
+          <stop offset="35%" stopColor="#38bdf8" stopOpacity="0.95" />
+          <stop offset="100%" stopColor="#2563eb" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+
+      {/* Top-left circuit traces following physical desk markings */}
+      <path className="q-circuit-base" d="M 0 70 L 60 70 L 90 90 L 120 50 L 170 0" />
+      <path className="q-circuit-base" d="M 0 140 L 70 140 L 110 60 L 150 20 L 190 0" />
+
+      {/* Bottom-left circuit traces flowing toward the queue HUD */}
+      <path className="q-circuit-base" d="M 0 350 L 80 430 L 180 430 L 250 490 L 320 490" />
+      <path className="q-circuit-base" d="M 0 410 L 60 470 L 140 470 L 200 520 L 280 520" />
+      <path className="q-circuit-base" d="M 0 460 L 50 510 L 120 510 L 170 560 L 230 560" />
+      <path className="q-circuit-base" d="M 320 490 L 420 490 L 480 440 L 540 440" />
+
+      {/* Active Glowing Pulses */}
+      {animated && (
+        <g className="q-pulses-group">
+          <path className="q-circuit-pulse q-flow-1" d="M 0 70 L 60 70 L 90 90 L 120 50 L 170 0" />
+          <path className="q-circuit-pulse q-flow-2" d="M 0 140 L 70 140 L 110 60 L 150 20 L 190 0" />
+          <path className="q-circuit-pulse q-flow-3" d="M 0 350 L 80 430 L 180 430 L 250 490 L 320 490" />
+          <path className="q-circuit-pulse q-flow-4" d="M 0 410 L 60 470 L 140 470 L 200 520 L 280 520" />
+          <path className="q-circuit-pulse q-flow-5" d="M 320 490 L 420 490 L 480 440 L 540 440" />
+        </g>
+      )}
+
+      {/* Junction solder pads */}
+      <circle className="q-circuit-node" cx="60" cy="70" r="3" />
+      <circle className="q-circuit-node" cx="90" cy="90" r="3" />
+      <circle className="q-circuit-node" cx="120" cy="50" r="3" />
+      <circle className="q-circuit-node" cx="70" cy="140" r="3" />
+      <circle className="q-circuit-node" cx="110" cy="60" r="3" />
+      <circle className="q-circuit-node" cx="80" cy="430" r="3" />
+      <circle className="q-circuit-node" cx="180" cy="430" r="3" />
+      <circle className="q-circuit-node" cx="250" cy="490" r="3" />
+      <circle className="q-circuit-node" cx="320" cy="490" r="3.5" />
+      <circle className="q-circuit-node" cx="480" cy="440" r="3" />
+      <circle className="q-circuit-node" cx="540" cy="440" r="3" />
+    </svg>
+  )
+}
+
+function QueueCameraFocusOverlay({ animated }: { animated: boolean }) {
+  return (
+    <div className="queue-camera-anchor" aria-hidden="true">
+      {animated && (
+        <>
+          <div className="camera-focus-ring ring-1" />
+          <div className="camera-focus-ring ring-2" />
+        </>
+      )}
+      <div className={`camera-reticle-crosshair ${animated ? 'pulsing' : ''}`}>
+        <span className="reticle-line h" />
+        <span className="reticle-line v" />
+        <span className="reticle-dot" />
+      </div>
+      <div className="camera-telemetry-tag">
+        <span className="camera-telemetry-dot" />
+        <span>OPTICAL RETICLE // 12MP DUAL OIS</span>
+      </div>
+    </div>
+  )
+}
+
+function CasesPage({
+  cases,
+  query,
+  setQuery,
+  statusFilter,
+  setStatusFilter,
+  priorityFilter,
+  setPriorityFilter,
+  onNew,
+  onOpen,
+  onStatus,
+  onDelete,
+  settings,
+}: {
+  cases: RepairCase[]
+  query: string
+  setQuery: (value: string) => void
+  statusFilter: string
+  setStatusFilter: (value: string) => void
+  priorityFilter: string
+  setPriorityFilter: (value: string) => void
+  onNew: () => void
+  onOpen: (id: string, tab?: NavId) => void
+  onStatus: (id: string, status: CaseStatus) => void
+  onDelete: (id: string, brand: string, model: string) => void
+  settings: AppSettings
 }) {
-  return <><div className="page-heading"><div><span className="eyebrow">INTELLIGENCE / DIAGNOSTIC WORKSPACE</span><h1>Diagnostics</h1><p className="page-subtitle">Build recommendations from observations—not assumptions.</p></div><button className="button button-primary" onClick={onNew}><Plus size={16} /> New repair</button></div>
-    <div className="diagnostic-select-bar"><div className="select-case-mark"><Stethoscope size={17} /></div><div className="select-case-copy"><strong>Working repair</strong><span>Choose the case to inspect and record evidence.</span></div><label className="case-picker"><span className="sr-only">Select repair case</span><select value={selected?.id || ''} onChange={(e) => onSelect(e.target.value)}><option value="" disabled>Select a repair case</option>{cases.map((item) => <option key={item.id} value={item.id}>{item.id} · {item.brand} {item.model} — {item.issue_title}</option>)}</select><ChevronDown size={15} /></label>{selected && <StatusPill status={selected.status} />}</div>
-    {!selected ? <div className="surface-card"><EmptyState icon={Stethoscope} title="Choose a repair to begin" description="Select an existing case or register a new repair to start recording diagnostic evidence." /><div className="empty-actions"><button className="button button-primary" onClick={onNew}><Plus size={16} /> Register repair</button></div></div> : <div className="diagnostics-layout"><div className="diagnostic-main-column"><section className="surface-card case-overview-card"><div className="case-overview-top"><div className="case-device-icon"><Smartphone size={22} /></div><div className="case-overview-id"><div className="eyebrow-row"><span className="eyebrow">{selected.id}</span><OriginBadge origin={selected.data_origin} /><PriorityPill priority={selected.priority} /></div><h2>{selected.issue_title}</h2><p>{selected.brand} {selected.model} <span className="bullet-separator">·</span> {selected.device_category}</p></div><div className="case-overview-status"><span className="meta-label">WORKFLOW STATUS</span><StatusPill status={selected.status} /></div></div><div className="case-symptoms"><span className="meta-label">REPORTED SYMPTOMS</span><p>{selected.symptoms}</p></div><div className="case-overview-foot"><span><Clock3 size={14} /> Opened {dateLabel(selected.created_at)}</span><span><Wrench size={14} /> {selected.assigned_to || 'Unassigned'}</span><span><Activity size={14} /> {selected.tests.length} test {selected.tests.length === 1 ? 'result' : 'results'} recorded</span></div></section>
-      <section className="surface-card evidence-card"><div className="section-card-head"><div><div className="card-title-inline"><span className="step-number">01</span><h3>Diagnostic evidence</h3></div><p>Record only what was actually checked.</p></div><span className="section-count">{selected.tests.length.toString().padStart(2, '0')} RESULTS</span></div>{selected.tests.length ? <div className="evidence-list">{selected.tests.map((test) => <div className="evidence-item" key={test.id}><div className={`evidence-result-icon result-${test.result}`}>{test.result === 'pass' ? <Check size={15} /> : test.result === 'fail' ? <X size={15} /> : test.result === 'not_tested' ? <Clock3 size={15} /> : <CircleDot size={15} />}</div><div className="evidence-copy"><div className="evidence-heading"><strong>{test.test_name}</strong><span className={`result-tag result-tag-${test.result}`}>{test.result.replaceAll('_', ' ')}</span></div><p>{test.observed_result}</p>{test.details && <small>{test.details}</small>}<span className="evidence-time">Recorded {dateTimeLabel(test.performed_at)}</span></div></div>)}</div> : <div className="inline-empty"><CircleHelp size={17} /><span>No test results yet. Add the first observation below.</span></div>}
-        {selected.status === 'completed' || selected.status === 'on_hold' ? <div className="read-only-note"><LockKeyhole size={14} /> This case is {selected.status === 'completed' ? 'completed' : 'on hold'}. Reopen the case from the Repair queue before adding tests.</div> : <form className="add-test-form" onSubmit={onAddTest}><div className="form-section-label">ADD A TEST RESULT</div><div className="form-grid two-cols"><label className="span-two">Test performed<select value={testForm.test_name} onChange={(e) => setTestForm((v) => ({ ...v, test_name: e.target.value }))}>{testSuggestions.map((item) => <option key={item}>{item}</option>)}</select></label><label>Result<select value={testForm.result} onChange={(e) => setTestForm((v) => ({ ...v, result: e.target.value as TestStatus }))}>{testOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label>Observation<textarea required rows={2} value={testForm.observed_result} onChange={(e) => setTestForm((v) => ({ ...v, observed_result: e.target.value }))} placeholder="What did you observe? Write 'not tested' if it was not performed." /></label><label className="span-two">Additional notes <span className="label-muted">(optional)</span><input value={testForm.details} onChange={(e) => setTestForm((v) => ({ ...v, details: e.target.value }))} placeholder="Conditions, tools used, or context" /></label></div><div className="form-footer"><span><Info size={13} /> Unknown is not the same as failed.</span><button className="button button-dark" type="submit" disabled={recordingTest}>{recordingTest ? <LoaderCircle size={15} className="spin" /> : <Plus size={15} />} Save observation</button></div></form>}</section>
-      <section className="surface-card outcome-card"><div className="section-card-head"><div><div className="card-title-inline"><span className="step-number step-number-dark">03</span><h3>Confirm repair outcome</h3></div><p>Only a technician can confirm the fault.</p></div><span className="section-count">TECHNICIAN INPUT</span></div><form onSubmit={onSaveOutcome} className="outcome-form"><label>Confirmed fault<input required minLength={3} value={outcomeForm.confirmed_fault} onChange={(e) => setOutcomeForm((v) => ({ ...v, confirmed_fault: e.target.value }))} placeholder="Enter the fault confirmed during diagnosis" /></label><label>Repair action taken<textarea required minLength={3} rows={2} value={outcomeForm.repair_action} onChange={(e) => setOutcomeForm((v) => ({ ...v, repair_action: e.target.value }))} placeholder="What was repaired, replaced, or adjusted?" /></label><label>Verification and outcome<textarea required minLength={3} rows={2} value={outcomeForm.outcome} onChange={(e) => setOutcomeForm((v) => ({ ...v, outcome: e.target.value }))} placeholder="What verification was performed and what happened?" /></label><div className="outcome-actions"><label className="outcome-status-label">Set status<select value={outcomeForm.status} onChange={(e) => setOutcomeForm((v) => ({ ...v, status: e.target.value as 'testing' | 'completed' | 'in_repair' }))}><option value="testing">Testing</option><option value="in_repair">In repair</option><option value="completed">Completed</option></select></label><button className="button button-primary" type="submit" disabled={recordingOutcome}>{recordingOutcome ? <LoaderCircle size={15} className="spin" /> : <CheckCircle2 size={15} />} Save outcome</button></div><p className="form-microcopy"><ShieldCheck size={13} /> Saving an outcome creates a searchable repair precedent. Sample cases remain marked as fictional.</p></form></section></div>
-    <aside className="diagnostic-side-column"><section className="ai-panel"><div className="ai-panel-header"><div className="ai-panel-icon"><Sparkles size={18} /></div><div><span className="eyebrow">FIXORA INTELLIGENCE</span><h3>Diagnostic copilot</h3></div><span className={`ai-panel-live ${health?.model_configured ? 'ai-panel-live-on' : ''}`}><span className="connection-dot" />{health?.model_configured ? 'KEY SET' : 'RULES'}</span></div><p className="ai-panel-description">Turn entered evidence into the next useful check, with uncertainty made explicit.</p><div className="ai-model-row"><div className="model-symbol"><BrainCircuit size={16} /></div><div><strong>{health?.model_configured ? health.model_name : 'Local rule-based guidance'}</strong><span>{health?.model_configured ? 'Gemma 4 via Gemini API' : 'No API key configured'}</span></div><span className="model-lock"><LockKeyhole size={13} /></span></div><button className="button button-ai" onClick={onGenerate} disabled={generating || selected.status === 'completed'}>{generating ? <><LoaderCircle size={16} className="spin" /> Reasoning over evidence…</> : <><Sparkles size={16} /> {recommendation ? 'Regenerate recommendation' : 'Generate recommendation'} <ArrowRight size={15} /></>}</button>{selected.status === 'completed' && <p className="ai-disabled-note">Reopen this completed case before generating another recommendation.</p>}<div className="ai-panel-foot"><span><ShieldCheck size={13} /> No diagnosis is auto-confirmed</span><span>Step 02 / 03</span></div></section>
-      {recommendation ? <RecommendationView recommendation={recommendation} stale={stale} /> : <section className="surface-card waiting-panel"><div className="waiting-illustration"><div className="waiting-circle circle-outer" /><div className="waiting-circle circle-mid" /><div className="waiting-core"><BrainCircuit size={22} /></div><span className="waiting-dot waiting-dot-1" /><span className="waiting-dot waiting-dot-2" /></div><h3>Your recommendation will appear here</h3><p>Record one or more observations, then generate guidance to review possible explanations, missing evidence, and the next check.</p><div className="waiting-mini-steps"><div><span>1</span> Record evidence</div><div><span>2</span> Review guidance</div><div><span>3</span> Confirm outcome</div></div></section>}
-      {recommendation?.similar_cases && recommendation.similar_cases.length > 0 && <section className="surface-card side-memory-card"><div className="section-card-head"><div><h3>Related repair memory</h3><p>Keyword matches, not diagnostic proof.</p></div><History size={17} className="muted-icon" /></div>{recommendation.similar_cases.slice(0, 2).map((item) => <button className="memory-match" key={item.id} onClick={() => onOpenCase(item.id, 'memory')}><span className="memory-match-icon"><History size={15} /></span><span><strong>{item.id} · {item.device}</strong><small>{item.issue_title}</small><em>Confirmed: {item.confirmed_fault}</em></span><ChevronRight size={15} /></button>)}</section>}
-      <section className="safety-card"><div className="safety-card-icon"><ShieldCheck size={17} /></div><div><strong>Safety before speed</strong><p>If there is swelling, smoke, unusual heat, odor, liquid ingress, or exposed wiring, stop routine tests and escalate to a qualified technician.</p><span>FIXORA SAFETY BASELINE · FX-SAFE-001</span></div></section>
-    </aside></div>}
-  </>
+  const animated = settings?.animationsEnabled ?? true
+
+  return (
+    <div className="queue-fullscreen-layout">
+      {/* Pristine Repair Queue Hardware Background Layer */}
+      <div className="queue-bg-layer" />
+
+      {/* Atmospheric negative space daylight wash for crystal-clear readability */}
+      <div className="queue-ambient-mask" aria-hidden="true" />
+
+      {/* Animated Circuit Streams aligned with printed desk markings */}
+      <QueueCircuitMapOverlay animated={animated} />
+
+      {/* Sweeping Optical Laser Scanner Line over Smartphone & Work Mat */}
+      {animated && (
+        <div className="queue-laser-scanner" aria-hidden="true" />
+      )}
+
+      {/* Smartphone Dual Camera Optical Focus Reticle */}
+      <QueueCameraFocusOverlay animated={animated} />
+
+      {/* SMD Diagnostic Micro-LEDs on physical board test points */}
+      <div className="queue-probes-layer" aria-hidden="true">
+        {QUEUE_TEST_POINTS.map((tp) => (
+          <div
+            key={tp.id}
+            className="queue-smd-probe"
+            style={{ right: tp.right, top: tp.top }}
+          >
+            <span
+              className={`probe-led ${animated ? 'pulsing' : ''}`}
+              style={{ backgroundColor: tp.color, boxShadow: `0 0 8px ${tp.color}` }}
+            />
+            {animated && (
+              <span
+                className="probe-ping"
+                style={{ borderColor: tp.color, animationDuration: tp.period }}
+              />
+            )}
+            <div className="probe-tooltip">
+              <span className="probe-code">{tp.code}</span>
+              <span className="probe-desc">{tp.label}</span>
+              <span className="probe-val" style={{ color: tp.color }}>{tp.status}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Minimalist Floating Glass HUD Container in Negative Space */}
+      <div className="queue-negative-hud">
+        <div className="queue-hud-header">
+          <div className="queue-telemetry-chip">
+            <span className="queue-telemetry-dot" />
+            <span>DIAGNOSTIC QUEUE // ACTIVE WORKSTATION</span>
+          </div>
+          <div className="queue-header-row">
+            <div className="queue-title-wrap">
+              <h1 className="queue-title">Repair queue</h1>
+              <span className="queue-count-badge">
+                {cases.length} {cases.length === 1 ? 'DEVICE' : 'DEVICES'}
+              </span>
+            </div>
+            <button className="button button-primary queue-new-btn" onClick={onNew}>
+              <Plus size={15} /> New repair
+            </button>
+          </div>
+        </div>
+
+        {/* Translucent Glass Queue Card */}
+        <div className="surface-card queue-card queue-glass-card">
+          <div className="queue-toolbar">
+            <div className="search-box">
+              <Search size={15} />
+              <input
+                aria-label="Search repair queue"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search ID, brand, model, issue..."
+              />
+              {query && (
+                <button onClick={() => setQuery('')} aria-label="Clear search">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+            <div className="filter-controls">
+              <label className="filter-select">
+                <Filter size={14} />
+                <select
+                  aria-label="Filter by status"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="all">All active</option>
+                  <option value="new">New</option>
+                  <option value="diagnosing">Diagnosing</option>
+                  <option value="waiting_parts">Waiting for parts</option>
+                  <option value="in_repair">In repair</option>
+                  <option value="testing">Testing</option>
+                  <option value="on_hold">On hold</option>
+                </select>
+                <ChevronDown size={14} />
+              </label>
+              <label className="filter-select">
+                <select
+                  aria-label="Filter by priority"
+                  value={priorityFilter}
+                  onChange={(e) => setPriorityFilter(e.target.value)}
+                >
+                  <option value="all">All priorities</option>
+                  <option value="urgent">Urgent</option>
+                  <option value="high">High</option>
+                  <option value="normal">Normal</option>
+                  <option value="low">Low</option>
+                </select>
+                <ChevronDown size={14} />
+              </label>
+            </div>
+          </div>
+
+          {cases.length ? (
+            <div className="queue-table-wrap">
+              <table className="data-table queue-table">
+                <thead>
+                  <tr>
+                    <th>DEVICE</th>
+                    <th>ISSUE</th>
+                    <th>STATUS</th>
+                    <th>PRIORITY</th>
+                    <th>CUSTOMER CONTACT</th>
+                    <th style={{ textAlign: 'right' }}>ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cases.map((item) => (
+                    <tr key={item.id} className="clickable-row" onClick={() => onOpen(item.id)}>
+                      <td>
+                        <div className="repair-id-cell">
+                          <div className="device-avatar">{deviceInitials(item.device_category)}</div>
+                          <div>
+                            <strong>{item.id}</strong>
+                            <span>{item.brand} {item.model}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="issue-cell">
+                          <strong>{item.issue_title}</strong>
+                          <span className="issue-snippet">{item.symptoms}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="status-cell">
+                          <StatusPill status={item.status} />
+                          <select
+                            className="status-edit-select"
+                            aria-label={`Change status for ${item.id}`}
+                            value={item.status}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => onStatus(item.id, e.target.value as CaseStatus)}
+                          >
+                            <option value="new">New</option>
+                            <option value="diagnosing">Diagnosing</option>
+                            <option value="waiting_parts">Waiting for parts</option>
+                            <option value="in_repair">In repair</option>
+                            <option value="testing">Testing</option>
+                            <option value="completed">Completed</option>
+                            <option value="on_hold">On hold</option>
+                          </select>
+                        </div>
+                      </td>
+                      <td>
+                        <PriorityPill priority={item.priority} />
+                      </td>
+                      <td>
+                        <div className="contact-cell">
+                          {item.customer_contact ? (
+                            <span><Phone size={12} /> {item.customer_contact}</span>
+                          ) : (
+                            <span className="label-muted">—</span>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="row-actions-cell" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            className="row-delete-btn"
+                            title="Delete device"
+                            onClick={() => onDelete(item.id, item.brand, item.model)}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                          <button
+                            className="row-open-button"
+                            aria-label={`Open ${item.id}`}
+                            onClick={() => onOpen(item.id)}
+                          >
+                            <ChevronRight size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState
+              icon={PackageSearch}
+              title="No devices in active queue"
+              description="All active devices have been serviced or match none of the filters."
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const DIAGNOSTICS_TEST_POINTS = [
+  {
+    id: 'd-holo',
+    code: 'HOLO-01',
+    label: 'EXPLODED ASSEMBLY HUD',
+    status: 'PROJECTION 100% NOMINAL',
+    color: '#38bdf8',
+    right: '23.3%',
+    top: '33.0%',
+    period: '2.0s',
+  },
+  {
+    id: 'd-wave',
+    code: 'SIG-GEN',
+    label: 'FREQUENCY ANALYZER',
+    status: '142.5 MHz NOMINAL',
+    color: '#2dd4bf',
+    right: '6.2%',
+    top: '18.2%',
+    period: '1.6s',
+  },
+  {
+    id: 'd-cam',
+    code: 'CAM-ARRAY',
+    label: 'TRIPLE OPTICAL SENSOR',
+    status: 'OIS COIL CALIBRATED',
+    color: '#38bdf8',
+    right: '26.8%',
+    top: '73.8%',
+    period: '2.4s',
+  },
+  {
+    id: 'd-soc',
+    code: 'AP-SoC',
+    label: 'LOGIC BOARD PROCESSOR',
+    status: 'CORE VOLTAGE 1.10V OK',
+    color: '#f59e0b',
+    right: '16.0%',
+    top: '69.4%',
+    period: '1.8s',
+  },
+  {
+    id: 'd-batt',
+    code: 'BATT-TERM',
+    label: 'BATTERY CHARGE RAIL',
+    status: '3.85V NOMINAL · 32°C',
+    color: '#10b981',
+    right: '8.0%',
+    top: '75.0%',
+    period: '2.2s',
+  },
+  {
+    id: 'd-tool',
+    code: 'PROBE-ESD',
+    label: 'TORX T3 PRECISION DRIVER',
+    status: 'MAGNETIC TIP ARMED',
+    color: '#a78bfa',
+    right: '19.9%',
+    top: '85.1%',
+    period: '2.8s',
+  },
+]
+
+function DiagnosticsCircuitMapOverlay({ animated }: { animated: boolean }) {
+  return (
+    <svg
+      className="diagnostics-circuit-svg"
+      viewBox="0 0 1024 576"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id="diagPulseGrad" x1="0" y1="0.5" x2="1" y2="0.5">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="1" />
+          <stop offset="35%" stopColor="#22d3ee" stopOpacity="0.95" />
+          <stop offset="100%" stopColor="#0284c7" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+
+      {/* Desk printed cyan tracks */}
+      <path className="d-circuit-base" d="M 0 42 L 50 42 L 90 80 L 140 42" />
+      <path className="d-circuit-base" d="M 0 305 L 60 305 L 90 325 L 125 305" />
+      <path className="d-circuit-base" d="M 0 545 L 310 545 L 430 495 L 495 495 L 586 434 L 680 434" />
+
+      {/* Active Glowing Pulses */}
+      {animated && (
+        <g className="d-pulses-group">
+          <path className="d-circuit-pulse d-flow-1" d="M 0 42 L 50 42 L 90 80 L 140 42" />
+          <path className="d-circuit-pulse d-flow-2" d="M 0 305 L 60 305 L 90 325 L 125 305" />
+          <path className="d-circuit-pulse d-flow-3" d="M 0 545 L 310 545 L 430 495 L 495 495 L 586 434 L 680 434" />
+        </g>
+      )}
+
+      {/* Junction pads at exact photo node positions */}
+      <circle className="d-circuit-node" cx="140" cy="42" r="3.5" />
+      <circle className="d-circuit-node" cx="125" cy="305" r="3.5" />
+      <circle className="d-circuit-node" cx="495" cy="495" r="3.5" />
+      <circle className="d-circuit-node" cx="586" cy="434" r="3.5" />
+    </svg>
+  )
+}
+
+function DiagnosticsHoloOverlay({ animated }: { animated: boolean }) {
+  return (
+    <div className="diagnostics-holo-anchor" aria-hidden="true">
+      {animated && (
+        <>
+          <div className="holo-reticle-bracket tl" />
+          <div className="holo-reticle-bracket tr" />
+          <div className="holo-reticle-bracket bl" />
+          <div className="holo-reticle-bracket br" />
+          <div className="holo-scanbeam" />
+        </>
+      )}
+      <div className="holo-telemetry-tag">
+        <span className="holo-tag-dot" />
+        <span>HOLO-HUD // EXPLODED ASSEMBLY VIEW</span>
+      </div>
+    </div>
+  )
+}
+
+function DiagnosticsWaveformOverlay({ animated }: { animated: boolean }) {
+  return (
+    <div className="diagnostics-waveform-anchor" aria-hidden="true">
+      {animated && <div className="waveform-signal-pulse" />}
+      <div className="waveform-telemetry-pill">
+        <span className="waveform-dot" />
+        <span>142.5 MHz // RF NOMINAL</span>
+      </div>
+    </div>
+  )
+}
+
+function DiagnosticsPage({
+  selected,
+  cases,
+  diagnosticsTab,
+  setDiagnosticsTab,
+  recommendation,
+  health,
+  stale,
+  generating,
+  recordingTest,
+  recordingOutcome,
+  testForm,
+  setTestForm,
+  outcomeForm,
+  setOutcomeForm,
+  onSelect,
+  onAddTest,
+  onGenerate,
+  onSaveOutcome,
+  onDelete,
+  onOpenCase,
+  settings,
+}: {
+  selected: CaseDetail | null
+  cases: RepairCase[]
+  diagnosticsTab: 'evidence' | 'recommendation'
+  setDiagnosticsTab: (tab: 'evidence' | 'recommendation') => void
+  recommendation: Recommendation | null
+  health: Health | null
+  stale: boolean
+  generating: boolean
+  recordingTest: boolean
+  recordingOutcome: boolean
+  testForm: { test_name: string; result: TestStatus; observed_result: string; details: string }
+  setTestForm: Dispatch<SetStateAction<{ test_name: string; result: TestStatus; observed_result: string; details: string }>>
+  outcomeForm: { confirmed_fault: string; repair_action: string; outcome: string; status: 'testing' | 'completed' | 'in_repair' }
+  setOutcomeForm: Dispatch<SetStateAction<{ confirmed_fault: string; repair_action: string; outcome: string; status: 'testing' | 'completed' | 'in_repair' }>>
+  onSelect: (id: string) => void
+  onAddTest: (event: FormEvent<HTMLFormElement>) => void
+  onGenerate: () => void
+  onSaveOutcome: (event: FormEvent<HTMLFormElement>) => void
+  onDelete: (id: string, brand: string, model: string) => void
+  onOpenCase: (id: string, tab?: NavId) => void
+  settings?: AppSettings
+}) {
+  const animated = settings?.animationsEnabled ?? true
+
+  return (
+    <div className="diagnostics-fullscreen-layout">
+      {/* Pristine Diagnostics Hardware Background Layer */}
+      <div className="diagnostics-bg-layer" />
+
+      {/* Atmospheric daylight wash for contrast */}
+      <div className="diagnostics-ambient-mask" aria-hidden="true" />
+
+      {/* Desk printed cyan tracks with active light streams */}
+      <DiagnosticsCircuitMapOverlay animated={animated} />
+
+      {/* Holographic exploded view reticle and scanbeam */}
+      <DiagnosticsHoloOverlay animated={animated} />
+
+      {/* Frequency / Oscilloscope Waveform Monitor */}
+      <DiagnosticsWaveformOverlay animated={animated} />
+
+      {/* Optical Laser Scanner Line */}
+      {animated && <div className="diagnostics-laser-scanner" aria-hidden="true" />}
+
+      {/* SMD Diagnostic Micro-LEDs on physical board test points */}
+      <div className="diagnostics-probes-layer" aria-hidden="true">
+        {DIAGNOSTICS_TEST_POINTS.map((tp) => (
+          <div
+            key={tp.id}
+            className="diagnostics-smd-probe"
+            style={{ right: tp.right, top: tp.top }}
+          >
+            <span
+              className={`probe-led ${animated ? 'pulsing' : ''}`}
+              style={{ backgroundColor: tp.color, boxShadow: `0 0 8px ${tp.color}` }}
+            />
+            {animated && (
+              <span
+                className="probe-ping"
+                style={{ borderColor: tp.color, animationDuration: tp.period }}
+              />
+            )}
+            <div className="probe-tooltip">
+              <span className="probe-code">{tp.code}</span>
+              <span className="probe-desc">{tp.label}</span>
+              <span className="probe-val" style={{ color: tp.color }}>{tp.status}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Minimalist Floating Glass HUD Container taking 70% width */}
+      <div className="diagnostics-negative-hud">
+        <div className="diagnostics-hud-header">
+          <div className="diagnostics-telemetry-chip">
+            <span className="diagnostics-telemetry-dot" />
+            <span>OPTICAL DIAGNOSTIC LAB // MULTI-SPECTRAL TELEMETRY</span>
+          </div>
+          <div className="diagnostics-header-row">
+            <h1 className="diagnostics-title">Diagnostics</h1>
+            {selected && (
+              <span className="diagnostics-device-chip">
+                {selected.id} · {selected.brand} {selected.model}
+              </span>
+            )}
+          </div>
+        </div>
+
+      <div className="diagnostic-select-bar">
+        <div className="select-case-mark"><Stethoscope size={16} /></div>
+        <label className="case-picker">
+          <span className="sr-only">Select device</span>
+          <select value={selected?.id || ''} onChange={(e) => onSelect(e.target.value)}>
+            <option value="" disabled>Select device</option>
+            {cases.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.id} · {item.brand} {item.model} — {item.issue_title}
+              </option>
+            ))}
+          </select>
+          <ChevronDown size={14} />
+        </label>
+        {selected && <StatusPill status={selected.status} />}
+        {selected && (
+          <button
+            className="button button-ghost-danger button-sm"
+            onClick={() => onDelete(selected.id, selected.brand, selected.model)}
+          >
+            <Trash2 size={14} /> Delete
+          </button>
+        )}
+      </div>
+
+      <div className="diagnostics-subnav">
+        <button
+          className={`diagnostics-tab-btn ${diagnosticsTab === 'evidence' ? 'active' : ''}`}
+          onClick={() => setDiagnosticsTab('evidence')}
+        >
+          <Activity size={15} />
+          Evidence & Repair Outcome
+        </button>
+        <button
+          className={`diagnostics-tab-btn ${diagnosticsTab === 'recommendation' ? 'active' : ''}`}
+          onClick={() => setDiagnosticsTab('recommendation')}
+        >
+          <Sparkles size={15} />
+          AI Recommendation
+          {recommendation && <span className="tab-indicator-dot" />}
+        </button>
+      </div>
+
+      {!selected ? (
+        <div className="surface-card">
+          <EmptyState
+            icon={Stethoscope}
+            title="Choose a device"
+            description="Select an existing device from the dropdown above to view or enter diagnostic data."
+          />
+        </div>
+      ) : (
+        <>
+          {diagnosticsTab === 'evidence' && (
+            <div className="diagnostics-subpage-evidence">
+              <section className="surface-card case-overview-card">
+                <div className="case-overview-top">
+                  <div className="case-device-icon"><Smartphone size={20} /></div>
+                  <div className="case-overview-id">
+                    <div className="eyebrow-row">
+                      <span className="eyebrow">{selected.id}</span>
+                      <PriorityPill priority={selected.priority} />
+                    </div>
+                    <h2>{selected.issue_title}</h2>
+                    <p>{selected.brand} {selected.model} · {selected.device_category}</p>
+                  </div>
+                  <div className="case-overview-status">
+                    <StatusPill status={selected.status} />
+                  </div>
+                </div>
+                <div className="case-symptoms">
+                  <span className="meta-label">SYMPTOMS</span>
+                  <p>{selected.symptoms}</p>
+                </div>
+                <div className="case-overview-foot">
+                  <span><Clock3 size={13} /> {dateLabel(selected.created_at)}</span>
+                  {selected.customer_contact && (
+                    <span><Phone size={13} /> {selected.customer_contact}</span>
+                  )}
+                  <span><Activity size={13} /> {selected.tests.length} tests</span>
+                </div>
+              </section>
+
+              <section className="surface-card evidence-card">
+                <div className="section-card-head">
+                  <div>
+                    <h3>Diagnostic evidence</h3>
+                  </div>
+                  <span className="section-count">{selected.tests.length} RESULTS</span>
+                </div>
+
+                {selected.tests.length ? (
+                  <div className="evidence-list">
+                    {selected.tests.map((test) => (
+                      <div className="evidence-item" key={test.id}>
+                        <div className={`evidence-result-icon result-${test.result}`}>
+                          {test.result === 'pass' ? <Check size={14} /> : test.result === 'fail' ? <X size={14} /> : <CircleHelp size={14} />}
+                        </div>
+                        <div className="evidence-copy">
+                          <div className="evidence-heading">
+                            <strong>{test.test_name}</strong>
+                            <span className={`result-tag result-tag-${test.result}`}>
+                              {test.result.replaceAll('_', ' ')}
+                            </span>
+                          </div>
+                          <p>{test.observed_result}</p>
+                          {test.details && <small>{test.details}</small>}
+                          <span className="evidence-time">{dateTimeLabel(test.performed_at)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="inline-empty">
+                    <CircleHelp size={16} />
+                    <span>No test results yet. Record the first test below.</span>
+                  </div>
+                )}
+
+                {selected.status === 'completed' ? (
+                  <div className="read-only-note">
+                    This case is completed. Reopen to record more tests.
+                  </div>
+                ) : (
+                  <form className="add-test-form" onSubmit={onAddTest}>
+                    <div className="form-section-label">ADD A TEST RESULT</div>
+                    <div className="form-grid two-cols">
+                      <label className="span-two">Test performed
+                        <select value={testForm.test_name} onChange={(e) => setTestForm((v) => ({ ...v, test_name: e.target.value }))}>
+                          {testSuggestions.map((item) => <option key={item}>{item}</option>)}
+                        </select>
+                      </label>
+                      <label>Result
+                        <select value={testForm.result} onChange={(e) => setTestForm((v) => ({ ...v, result: e.target.value as TestStatus }))}>
+                          {testOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                        </select>
+                      </label>
+                      <label>Observation
+                        <textarea required rows={2} value={testForm.observed_result} onChange={(e) => setTestForm((v) => ({ ...v, observed_result: e.target.value }))} placeholder="What was observed?" />
+                      </label>
+                      <label className="span-two">Notes <span className="label-muted">(optional)</span>
+                        <input value={testForm.details} onChange={(e) => setTestForm((v) => ({ ...v, details: e.target.value }))} placeholder="Additional conditions or context" />
+                      </label>
+                    </div>
+                    <div className="form-footer">
+                      <button className="button button-dark" type="submit" disabled={recordingTest}>
+                        {recordingTest ? <LoaderCircle size={15} className="spin" /> : <Plus size={15} />} Save test
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </section>
+
+              <section className="surface-card outcome-card">
+                <div className="section-card-head">
+                  <div>
+                    <h3>Repair outcome</h3>
+                  </div>
+                </div>
+                <form onSubmit={onSaveOutcome} className="outcome-form">
+                  <label>Confirmed fault
+                    <input required minLength={3} value={outcomeForm.confirmed_fault} onChange={(e) => setOutcomeForm((v) => ({ ...v, confirmed_fault: e.target.value }))} placeholder="Diagnosed fault" />
+                  </label>
+                  <label>Repair action taken
+                    <textarea required minLength={3} rows={2} value={outcomeForm.repair_action} onChange={(e) => setOutcomeForm((v) => ({ ...v, repair_action: e.target.value }))} placeholder="What was repaired or replaced?" />
+                  </label>
+                  <label>Verification outcome
+                    <textarea required minLength={3} rows={2} value={outcomeForm.outcome} onChange={(e) => setOutcomeForm((v) => ({ ...v, outcome: e.target.value }))} placeholder="Final verification result" />
+                  </label>
+                  <div className="outcome-actions">
+                    <label className="outcome-status-label">Set status
+                      <select value={outcomeForm.status} onChange={(e) => setOutcomeForm((v) => ({ ...v, status: e.target.value as 'testing' | 'completed' | 'in_repair' }))}>
+                        <option value="testing">Testing</option>
+                        <option value="in_repair">In repair</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                    </label>
+                    <button className="button button-primary" type="submit" disabled={recordingOutcome}>
+                      {recordingOutcome ? <LoaderCircle size={15} className="spin" /> : <CheckCircle2 size={15} />} Save outcome
+                    </button>
+                  </div>
+                </form>
+              </section>
+            </div>
+          )}
+
+          {diagnosticsTab === 'recommendation' && (
+            <div className="diagnostics-subpage-ai">
+              <section className="surface-card ai-clean-copilot">
+                <div className="ai-panel-header">
+                  <div className="ai-panel-icon"><Sparkles size={18} /></div>
+                  <div>
+                    <h3>Diagnostic copilot</h3>
+                    <p className="ai-model-tag">
+                      {health?.model_configured ? `${health.model_name} (Gemini API)` : 'Local rule-based guidance'}
+                    </p>
+                  </div>
+                  <button
+                    className="button button-ai button-compact"
+                    onClick={onGenerate}
+                    disabled={generating || selected.status === 'completed'}
+                  >
+                    {generating ? (
+                      <><LoaderCircle size={15} className="spin" /> Reasoning…</>
+                    ) : (
+                      <><Sparkles size={15} /> {recommendation ? 'Regenerate recommendation' : 'Generate recommendation'}</>
+                    )}
+                  </button>
+                </div>
+              </section>
+
+              {recommendation ? (
+                <RecommendationView recommendation={recommendation} stale={stale} />
+              ) : (
+                <section className="surface-card waiting-panel-clean">
+                  <BrainCircuit size={28} className="muted-icon" />
+                  <h3>No recommendation generated yet</h3>
+                  <p>Click "Generate recommendation" above to produce guided checks from entered evidence.</p>
+                </section>
+              )}
+
+              {recommendation?.similar_cases && recommendation.similar_cases.length > 0 && (
+                <section className="surface-card side-memory-card">
+                  <div className="section-card-head">
+                    <div>
+                      <h3>Related repair memory</h3>
+                    </div>
+                  </div>
+                  <div className="memory-matches-list">
+                    {recommendation.similar_cases.map((item) => (
+                      <button key={item.id} className="memory-match" onClick={() => onOpenCase(item.id, 'memory')}>
+                        <span className="memory-match-icon"><History size={14} /></span>
+                        <span>
+                          <strong>{item.id} · {item.device}</strong>
+                          <small>{item.issue_title}</small>
+                          <em>Confirmed: {item.confirmed_fault}</em>
+                        </span>
+                        <ChevronRight size={14} />
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </div>
+          )}
+        </>
+      )}
+      </div>
+    </div>
+  )
 }
 
 function RecommendationView({ recommendation, stale }: { recommendation: Recommendation; stale: boolean }) {
   const [expandedHypothesis, setExpandedHypothesis] = useState(0)
   const content = recommendation.content
   const isLive = recommendation.provider === 'gemini_api'
-  return <section className={`surface-card recommendation-card ${stale ? 'recommendation-stale' : ''}`}><div className="recommendation-head"><div className="recommendation-head-icon"><Sparkles size={16} /></div><div><span className="eyebrow">RECOMMENDATION</span><h3>Evidence review</h3></div><span className={`source-mode ${isLive ? 'source-mode-live' : 'source-mode-fallback'}`}>{isLive ? 'GEMMA 4' : 'LOCAL RULES'}</span></div>{stale && <div className="stale-banner"><AlertCircle size={14} /> New test evidence was added after this recommendation. Regenerate before using it.</div>}<p className="recommendation-summary">{content.summary}</p><div className="confidence-legend"><span><span className="legend-dot legend-plausible" /> Plausible</span><span><span className="legend-dot legend-possible" /> Possible</span><span className="legend-note">Labels are qualitative, not probabilities.</span></div><div className="hypothesis-section"><div className="recommendation-section-title"><span>01</span><h4>Possible explanations</h4></div>{content.hypotheses.map((hypothesis, index) => <div className={`hypothesis-item ${expandedHypothesis === index ? 'hypothesis-expanded' : ''}`} key={`${hypothesis.fault}-${index}`}><button className="hypothesis-toggle" onClick={() => setExpandedHypothesis((current) => current === index ? -1 : index)}><div className={`hypothesis-index ${hypothesis.likelihood}`}>{index + 1}</div><div className="hypothesis-title-wrap"><strong>{hypothesis.fault}</strong><span className={`likelihood-label likelihood-${hypothesis.likelihood}`}>{titleCase(hypothesis.likelihood)}</span></div><ChevronDown size={15} /></button>{expandedHypothesis === index && <div className="hypothesis-detail"><p>{hypothesis.reasoning}</p>{hypothesis.supporting_evidence.length > 0 && <div className="evidence-chips-group"><span className="evidence-group-label">SUPPORTING OBSERVATIONS</span>{hypothesis.supporting_evidence.map((evidence, i) => <div className="evidence-chip positive" key={`${evidence}-${i}`}><Check size={12} />{evidence}</div>)}</div>}{hypothesis.contradicting_evidence.length > 0 && <div className="evidence-chips-group"><span className="evidence-group-label">CONTRADICTING OBSERVATIONS</span>{hypothesis.contradicting_evidence.map((evidence, i) => <div className="evidence-chip caution" key={`${evidence}-${i}`}><AlertCircle size={12} />{evidence}</div>)}</div>}</div>}</div>)}</div><div className="next-checks-section"><div className="recommendation-section-title"><span>02</span><h4>Recommended next checks</h4></div>{content.next_checks.map((check, index) => <NextCheckCard check={check} index={index} key={`${check.name}-${index}`} />)}</div>{content.missing_information.length > 0 && <div className="missing-info-box"><div className="missing-info-heading"><CircleHelp size={15} /><strong>Evidence still missing</strong></div><ul>{content.missing_information.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></div>}{content.safety_notes.length > 0 && <div className="recommendation-safety"><ShieldCheck size={15} /><div><strong>Safety and interpretation</strong>{content.safety_notes.map((item, index) => <p key={`${item}-${index}`}>{item}</p>)}</div></div>}{recommendation.sources.length > 0 && <div className="source-reference-section"><span className="evidence-group-label">REFERENCE NOTES USED</span>{recommendation.sources.map((source) => <div className="source-reference" key={source.id}><div><strong>{source.title}</strong><span>{source.id} · {source.kind}</span><p>{source.review_note}</p></div>{source.source_url && <a href={source.source_url} target="_blank" rel="noreferrer" aria-label={`Open ${source.title}`}><ExternalLink size={14} /></a>}</div>)}</div>}{content.limitations.length > 0 && <details className="limitation-details"><summary><Info size={14} /> Model and method limitations</summary><ul>{content.limitations.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></details>}<div className="recommendation-footer"><span><Clock3 size={12} /> Generated {dateTimeLabel(recommendation.generated_at)}</span><span>{recommendation.model_name}</span></div></section>
+
+  return (
+    <section className={`surface-card recommendation-card ${stale ? 'recommendation-stale' : ''}`}>
+      <div className="recommendation-head">
+        <div className="recommendation-head-icon"><Sparkles size={16} /></div>
+        <div>
+          <h3>Evidence review</h3>
+        </div>
+        <span className={`source-mode ${isLive ? 'source-mode-live' : 'source-mode-fallback'}`}>
+          {isLive ? 'GEMMA 4' : 'LOCAL RULES'}
+        </span>
+      </div>
+
+      {stale && (
+        <div className="stale-banner">
+          <AlertCircle size={14} /> New test evidence was added after this recommendation.
+        </div>
+      )}
+
+      <p className="recommendation-summary">{content.summary}</p>
+
+      <div className="hypothesis-section">
+        <div className="recommendation-section-title">
+          <h4>Possible explanations</h4>
+        </div>
+        {content.hypotheses.map((hypothesis, index) => (
+          <div
+            className={`hypothesis-item ${expandedHypothesis === index ? 'hypothesis-expanded' : ''}`}
+            key={`${hypothesis.fault}-${index}`}
+          >
+            <button
+              className="hypothesis-toggle"
+              onClick={() => setExpandedHypothesis((cur) => (cur === index ? -1 : index))}
+            >
+              <div className={`hypothesis-index ${hypothesis.likelihood}`}>{index + 1}</div>
+              <div className="hypothesis-title-wrap">
+                <strong>{hypothesis.fault}</strong>
+                <span className={`likelihood-label likelihood-${hypothesis.likelihood}`}>
+                  {titleCase(hypothesis.likelihood)}
+                </span>
+              </div>
+              <ChevronDown size={14} />
+            </button>
+            {expandedHypothesis === index && (
+              <div className="hypothesis-detail">
+                <p>{hypothesis.reasoning}</p>
+                {hypothesis.supporting_evidence.length > 0 && (
+                  <div className="evidence-chips-group">
+                    <span className="evidence-group-label">SUPPORTING</span>
+                    {hypothesis.supporting_evidence.map((evidence, i) => (
+                      <div className="evidence-chip positive" key={`${evidence}-${i}`}>
+                        <Check size={12} /> {evidence}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {hypothesis.contradicting_evidence.length > 0 && (
+                  <div className="evidence-chips-group">
+                    <span className="evidence-group-label">CONTRADICTING</span>
+                    {hypothesis.contradicting_evidence.map((evidence, i) => (
+                      <div className="evidence-chip caution" key={`${evidence}-${i}`}>
+                        <AlertCircle size={12} /> {evidence}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="next-checks-section">
+        <div className="recommendation-section-title">
+          <h4>Recommended next checks</h4>
+        </div>
+        {content.next_checks.map((check, index) => (
+          <NextCheckCard check={check} index={index} key={`${check.name}-${index}`} />
+        ))}
+      </div>
+
+      {content.missing_information.length > 0 && (
+        <div className="missing-info-box">
+          <div className="missing-info-heading">
+            <CircleHelp size={14} />
+            <strong>Missing information</strong>
+          </div>
+          <ul>
+            {content.missing_information.map((item, index) => (
+              <li key={`${item}-${index}`}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {recommendation.sources.length > 0 && (
+        <div className="source-reference-section">
+          <span className="evidence-group-label">REFERENCE NOTES</span>
+          {recommendation.sources.map((source) => (
+            <div className="source-reference" key={source.id}>
+              <div>
+                <strong>{source.title}</strong>
+                <span>{source.id}</span>
+              </div>
+              {source.source_url && (
+                <a href={source.source_url} target="_blank" rel="noreferrer" aria-label={`Open ${source.title}`}>
+                  <ExternalLink size={13} />
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="recommendation-footer">
+        <span>{dateTimeLabel(recommendation.generated_at)}</span>
+        <span>{recommendation.model_name}</span>
+      </div>
+    </section>
+  )
 }
 
 function NextCheckCard({ check, index }: { check: NextCheck; index: number }) {
   const [open, setOpen] = useState(index === 0)
-  return <div className={`next-check-item ${open ? 'next-check-open' : ''}`}><button className="next-check-head" onClick={() => setOpen((value) => !value)}><span className="next-check-number">{String(index + 1).padStart(2, '0')}</span><span className="next-check-main"><strong>{check.name}</strong><small>{check.purpose}</small></span><span className={`safety-level safety-${check.safety_level}`}>{check.safety_level === 'professional_only' ? 'Pro only' : check.safety_level}</span><ChevronDown size={14} /></button>{open && <div className="next-check-body"><p>{check.instructions}</p><div className="record-this"><ClipboardCheck size={13} /><span><strong>Record:</strong> {check.what_to_record}</span></div></div>}</div>
+  return (
+    <div className={`next-check-item ${open ? 'next-check-open' : ''}`}>
+      <button className="next-check-head" onClick={() => setOpen((v) => !v)}>
+        <span className="next-check-number">{String(index + 1).padStart(2, '0')}</span>
+        <span className="next-check-main">
+          <strong>{check.name}</strong>
+          <small>{check.purpose}</small>
+        </span>
+        <span className={`safety-level safety-${check.safety_level}`}>
+          {check.safety_level === 'professional_only' ? 'Pro only' : check.safety_level}
+        </span>
+        <ChevronDown size={14} />
+      </button>
+      {open && (
+        <div className="next-check-body">
+          <p>{check.instructions}</p>
+          <div className="record-this">
+            <ClipboardCheck size={13} />
+            <span><strong>Record:</strong> {check.what_to_record}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
-function MemoryPage({ cases, query, setQuery, onOpen }: { cases: RepairCase[]; query: string; setQuery: (value: string) => void; onOpen: (id: string, tab?: NavId) => void }) {
-  return <><div className="page-heading"><div><span className="eyebrow">INTELLIGENCE / LEARN FROM OUTCOMES</span><h1>Repair memory</h1><p className="page-subtitle">A searchable history of cases with technician-confirmed outcomes.</p></div><div className="memory-count-pill"><History size={15} /> {cases.length} outcome records</div></div><div className="memory-hero"><div className="memory-hero-icon"><History size={23} /></div><div><h2>Keep what worked. Verify every match.</h2><p>Historical cases can inform the next check, but a similar symptom never proves the same fault.</p></div><div className="memory-hero-stat"><strong>{cases.filter((item) => item.data_origin !== 'demo').length}</strong><span>Real records entered</span></div></div><section className="surface-card memory-table-card"><div className="section-card-head"><div><h3>Confirmed repair history</h3><p>Search by device, symptom, fault, or repair action.</p></div><span className="section-count">SEARCHABLE CASES</span></div><div className="search-box memory-search"><Search size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search the workshop's repair memory..." />{query && <button onClick={() => setQuery('')} aria-label="Clear memory search"><X size={14} /></button>}</div>{cases.length ? <div className="memory-list">{cases.map((item) => <button className="memory-record" key={item.id} onClick={() => onOpen(item.id, 'diagnostics')}><div className="memory-record-icon"><HardDrive size={18} /></div><div className="memory-record-main"><div className="memory-record-title"><strong>{item.issue_title}</strong><OriginBadge origin={item.data_origin} /><span className="memory-record-id">{item.id}</span></div><span className="memory-device-line">{item.brand} {item.model} · {dateLabel(item.updated_at)}</span><span className="memory-fault-line"><CheckCircle2 size={13} /> Confirmed fault: {item.confirmed_fault}</span><span className="memory-action-line">{item.repair_action || 'No repair action recorded'}</span></div><div className="memory-record-outcome"><span>RECORDED OUTCOME</span><p>{item.outcome || 'Outcome not recorded'}</p></div><ChevronRight size={17} className="memory-chevron" /></button>)}</div> : <EmptyState icon={History} title="No matching repair history" description="Completed cases with a confirmed fault will appear here. Use the search bar or save an outcome in Diagnostics." />}<div className="memory-disclaimer"><Info size={14} /><span>Similarity is a retrieval aid, not a calibrated score. Always compare model, conditions, and test results; do not infer technician error from a repeated issue.</span></div></section></>
+function MemoryPage({
+  cases,
+  query,
+  setQuery,
+  onOpen,
+  onDelete,
+}: {
+  cases: RepairCase[]
+  query: string
+  setQuery: (value: string) => void
+  onOpen: (id: string, tab?: NavId) => void
+  onDelete: (id: string, brand: string, model: string) => void
+}) {
+  return (
+    <>
+      <div className="page-heading">
+        <div>
+          <h1>Repair memory</h1>
+        </div>
+        <div className="memory-count-pill">
+          <History size={15} /> {cases.length} completed cases
+        </div>
+      </div>
+
+      <section className="surface-card memory-table-card">
+        <div className="search-box memory-search">
+          <Search size={15} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search completed devices, faults, or outcomes..."
+          />
+          {query && (
+            <button onClick={() => setQuery('')} aria-label="Clear memory search">
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        {cases.length ? (
+          <div className="memory-list">
+            {cases.map((item) => (
+              <div className="memory-record" key={item.id} onClick={() => onOpen(item.id, 'diagnostics')}>
+                <div className="memory-record-icon"><History size={16} /></div>
+                <div className="memory-record-main">
+                  <div className="memory-record-title">
+                    <strong>{item.issue_title}</strong>
+                    <span className="memory-record-id">{item.id}</span>
+                  </div>
+                  <span className="memory-device-line">{item.brand} {item.model} · {dateLabel(item.updated_at)}</span>
+                  <span className="memory-fault-line">
+                    <CheckCircle2 size={13} /> Confirmed: {item.confirmed_fault}
+                  </span>
+                  <span className="memory-action-line">{item.repair_action}</span>
+                </div>
+                <div className="memory-record-outcome">
+                  <span>OUTCOME</span>
+                  <p>{item.outcome || 'None'}</p>
+                </div>
+                <div className="row-actions-cell" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    className="row-delete-btn"
+                    title="Delete record"
+                    onClick={() => onDelete(item.id, item.brand, item.model)}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                  <ChevronRight size={16} className="memory-chevron" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={History}
+            title="No completed repair records"
+            description="Devices marked as completed with a confirmed fault appear here."
+          />
+        )}
+      </section>
+    </>
+  )
 }
 
-function KnowledgePage({ sources, notice }: { sources: KnowledgeSource[]; notice: string }) {
-  return <><div className="page-heading"><div><span className="eyebrow">INTELLIGENCE / SOURCES & SAFETY</span><h1>Knowledge base</h1><p className="page-subtitle">The reviewed notes available to the recommendation engine.</p></div><div className="knowledge-pill"><BookOpen size={15} /> {sources.length} reference notes</div></div><div className="knowledge-callout"><div className="knowledge-callout-icon"><ShieldCheck size={20} /></div><div><strong>Transparent by design</strong><p>{notice || 'Recommendations only cite reference notes included in the app.'} The current starter set is generic prototype guidance, not manufacturer-specific service documentation. Add reviewed documentation before relying on it for a real device.</p></div></div><div className="knowledge-grid">{sources.map((source, index) => <article className="surface-card knowledge-card" key={source.id}><div className="knowledge-card-head"><div className={`knowledge-source-icon source-icon-${index % 4}`}>{index === 0 ? <Zap size={18} /> : index === 1 ? <ShieldCheck size={18} /> : index === 2 ? <FileCheck2 size={18} /> : <History size={18} />}</div><span className="source-id">{source.id}</span></div><span className="knowledge-kind">{source.kind}</span><h3>{source.title}</h3><p className="knowledge-scope">{source.scope}</p><div className="knowledge-content">{source.content}</div><div className="knowledge-card-foot"><Info size={13} /><span>{source.review_note}</span></div>{source.source_url && <a className="knowledge-external-link" href={source.source_url} target="_blank" rel="noreferrer">Open source <ExternalLink size={13} /></a>}</article>)}</div><div className="knowledge-bottom-note"><LockKeyhole size={15} /><span>Model outputs are schema-validated; only known source IDs are accepted. The model cannot create a new trusted source by inventing a URL.</span></div></>
+function KnowledgePage({ sources, notice }: { sources: KnowledgeSource[]; notice?: string }) {
+  return (
+    <>
+      <div className="page-heading">
+        <div>
+          <h1>Knowledge base</h1>
+          {notice && <p className="page-subtitle">{notice}</p>}
+        </div>
+      </div>
+
+      <div className="knowledge-grid">
+        {sources.map((source, index) => (
+          <article className="surface-card knowledge-card" key={source.id}>
+            <div className="knowledge-card-head">
+              <span className={`knowledge-source-icon source-icon-${index % 4}`}>
+                <BookOpen size={16} />
+              </span>
+              <span className="source-id">{source.id}</span>
+            </div>
+            <h3>{source.title}</h3>
+            <p className="knowledge-scope">{source.scope}</p>
+            <div className="knowledge-content">{source.content}</div>
+            {source.source_url && (
+              <a className="knowledge-external-link" href={source.source_url} target="_blank" rel="noreferrer">
+                Source reference <ExternalLink size={12} />
+              </a>
+            )}
+          </article>
+        ))}
+      </div>
+    </>
+  )
 }

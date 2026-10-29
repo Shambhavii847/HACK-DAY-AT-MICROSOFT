@@ -43,8 +43,7 @@ class RepairCaseCreate(BaseModel):
     symptoms: str = Field(min_length=5, max_length=3000)
     priority: Priority = "normal"
     status: CaseStatus = "new"
-    customer_reference: str | None = Field(default=None, max_length=100)
-    assigned_to: str = Field(default="Unassigned", max_length=80)
+    customer_contact: str | None = Field(default=None, max_length=120)
     estimated_minutes: int | None = Field(default=None, ge=1, le=10000)
     estimate_cost: float | None = Field(default=None, ge=0, le=10000000)
 
@@ -60,7 +59,7 @@ class RepairCaseCreate(BaseModel):
 class RepairCaseUpdate(BaseModel):
     status: CaseStatus | None = None
     priority: Priority | None = None
-    assigned_to: str | None = Field(default=None, max_length=80)
+    customer_contact: str | None = Field(default=None, max_length=120)
     estimated_minutes: int | None = Field(default=None, ge=1, le=10000)
     estimate_cost: float | None = Field(default=None, ge=0, le=10000000)
 
@@ -81,13 +80,12 @@ class CaseRead(BaseModel):
     symptoms: str
     priority: str
     status: str
-    customer_reference: str | None
-    assigned_to: str
-    confirmed_fault: str | None
-    repair_action: str | None
-    outcome: str | None
-    estimate_cost: float | None
-    estimated_minutes: int | None
+    customer_contact: str | None = None
+    confirmed_fault: str | None = None
+    repair_action: str | None = None
+    outcome: str | None = None
+    estimate_cost: float | None = None
+    estimated_minutes: int | None = None
     data_origin: str
     created_at: datetime
     updated_at: datetime

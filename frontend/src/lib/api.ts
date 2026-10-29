@@ -31,9 +31,10 @@ export const api = {
   knowledge: () => request<{ sources: KnowledgeSource[]; notice: string }>('/api/knowledge'),
   createCase: (data: {
     device_category: string; brand: string; model: string; issue_title: string; symptoms: string;
-    priority: string; assigned_to: string; customer_reference?: string; estimated_minutes?: number | null; estimate_cost?: number | null
+    priority: string; customer_contact?: string; estimated_minutes?: number | null; estimate_cost?: number | null
   }) => request<RepairCase>('/api/cases', { method: 'POST', body: JSON.stringify(data) }),
-  updateCase: (id: string, data: { status?: string; priority?: string; assigned_to?: string }) => request<RepairCase>(`/api/cases/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  updateCase: (id: string, data: { status?: string; priority?: string; customer_contact?: string }) => request<RepairCase>(`/api/cases/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteCase: (id: string) => request<{ ok: boolean; deleted: string }>(`/api/cases/${id}`, { method: 'DELETE' }),
   addTest: (id: string, data: { test_name: string; result: TestStatus; observed_result: string; details: string }) => request<TestResult>(`/api/cases/${id}/tests`, { method: 'POST', body: JSON.stringify(data) }),
   recommendation: (id: string) => request<Recommendation>(`/api/cases/${id}/recommendation`, { method: 'POST' }),
   outcome: (id: string, data: { confirmed_fault: string; repair_action: string; outcome: string; status: 'testing' | 'completed' | 'in_repair' }) => request<RepairCase>(`/api/cases/${id}/outcome`, { method: 'POST', body: JSON.stringify(data) }),

@@ -11,8 +11,7 @@ export interface RepairCase {
   symptoms: string
   priority: Priority
   status: CaseStatus
-  customer_reference: string | null
-  assigned_to: string
+  customer_contact: string | null
   confirmed_fault: string | null
   repair_action: string | null
   outcome: string | null

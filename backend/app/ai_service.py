@@ -15,6 +15,18 @@ def _norm(value: str | None) -> str:
     return re.sub(r"\s+", " ", (value or "").lower()).strip()
 
 
+def _has_safety_signal(text: str) -> bool:
+    safety_terms = r"\b(warm|hot|heat|swollen|swelling|smoke|odor|smell|liquid|corrosion|burn)\b"
+    for match in re.finditer(safety_terms, text):
+        start = match.start()
+        prefix = text[max(0, start - 40) : start]
+        # Ignore if preceded by a negation word (e.g., "no recent drop or liquid exposure")
+        if re.search(r"\b(no|not|without|denies|zero)\b(?:\s+\w+){0,3}\s*$", prefix):
+            continue
+        return True
+    return False
+
+
 def _case_test_text(tests: list[TestResult]) -> str:
     if not tests:
         return "No diagnostic tests have been recorded."
@@ -76,8 +88,7 @@ def _fallback_recommendation(case: RepairCase, tests: list[TestResult], similar:
     """Deterministic, conservative guidance used without a working model call."""
     issue = _norm(f"{case.issue_title} {case.symptoms}")
     observed = " ".join(_norm(f"{t.test_name} {t.result} {t.observed_result} {t.details}") for t in tests)
-    safety_keywords = ("warm", "hot", "heat", "swollen", "swelling", "smoke", "odor", "smell", "liquid", "corrosion", "burn")
-    safety_hold = any(word in issue for word in safety_keywords) or any(word in observed for word in safety_keywords)
+    safety_hold = _has_safety_signal(issue) or _has_safety_signal(observed)
 
     source_ids = ["FX-EVIDENCE-001", "FX-GUIDE-001"]
     hypotheses: list[Hypothesis] = []
@@ -200,12 +211,18 @@ def _parse_json_response(text: str) -> dict[str, Any]:
     cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s*```$", "", cleaned)
     try:
-        return json.loads(cleaned)
+        parsed = json.loads(cleaned)
     except json.JSONDecodeError:
         start, end = cleaned.find("{"), cleaned.rfind("}")
         if start >= 0 and end > start:
-            return json.loads(cleaned[start : end + 1])
-        raise
+            parsed = json.loads(cleaned[start : end + 1])
+        else:
+            raise
+    if isinstance(parsed, list) and len(parsed) > 0 and isinstance(parsed[0], dict):
+        parsed = parsed[0]
+    if not isinstance(parsed, dict):
+        raise ValueError(f"Expected a JSON object, got {type(parsed).__name__}")
+    return parsed
 
 
 def generate_recommendation(db: Session, case: RepairCase) -> tuple[str, str, RecommendationContent, list[dict[str, Any]]]:
@@ -223,7 +240,7 @@ def generate_recommendation(db: Session, case: RepairCase) -> tuple[str, str, Re
             prompt = f"""You are Fixora, a cautious electronics-repair diagnostic assistant supporting a qualified technician.
 Your task is to recommend safe next checks using ONLY the supplied case facts and reference notes. Do not invent measurements, test results, device specifications, manufacturer procedures, component compatibility, prices, or citations. A possible fault is not a confirmed diagnosis. Similar cases are only weak precedents.
 
-Return ONLY a valid JSON object using exactly these keys:
+Return ONLY a valid JSON object (do not wrap in an array) using exactly these keys:
 {{"summary":"string","hypotheses":[{{"fault":"string","likelihood":"possible|plausible|less_likely","supporting_evidence":["strings"],"contradicting_evidence":["strings"],"reasoning":"string"}}],"next_checks":[{{"name":"string","purpose":"string","instructions":"string","what_to_record":"string","safety_level":"routine|caution|professional_only"}}],"missing_information":["strings"],"safety_notes":["strings"],"source_ids":["known source IDs only"],"limitations":["strings"]}}
 
 Rules:
@@ -253,9 +270,17 @@ REVIEWED FIXORA PROTOTYPE REFERENCE NOTES (these are generic workflow/safety not
             response = client.models.generate_content(
                 model=settings.gemma_model,
                 contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=1800),
+                config=types.GenerateContentConfig(
+                    temperature=0.2,
+                    max_output_tokens=4096,
+                    response_mime_type="application/json",
+                ),
             )
             raw_text = getattr(response, "text", None)
+            if not raw_text and response.candidates and response.candidates[0].content:
+                for part in response.candidates[0].content.parts:
+                    if not getattr(part, "thought", False) and getattr(part, "text", None):
+                        raw_text = (raw_text or "") + part.text
             if not raw_text or not raw_text.strip():
                 raise ValueError("The model returned an empty response")
             parsed = _parse_json_response(raw_text)
