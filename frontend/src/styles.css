@@ -3903,3 +3903,342 @@ body.high-contrast-hud .game-btn {
   color: #e5f2ff;
   border-color: rgba(255, 255, 255, 0.15);
 }
+
+/* Overview dashboard refresh */
+.overview-fullscreen-wrap { margin-bottom: 0; }
+.overview-fullscreen-layout { min-height: calc(100vh - 58px); overflow: visible; padding: 36px clamp(18px, 4vw, 56px) 132px; }
+.overview-negative-hud { width: min(100%, 1400px); max-width: 1400px; align-self: center; gap: 24px; }
+.overview-hud-header { gap: 8px; }
+.overview-telemetry-chip { font-size: 10px; letter-spacing: .55px; }
+.overview-hud-header h1 { font-size: clamp(30px, 3vw, 40px); letter-spacing: -1.4px; }
+.overview-subtitle { margin: 0; color: #5e6b7c; font-size: 14px; line-height: 1.55; }
+.overview-glass-stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.overview-glass-card { min-height: 166px; padding: 19px 20px; }
+.glass-card-icon { width: 38px; height: 38px; border-radius: 11px; }
+.glass-card-val { font-size: 34px; }
+.glass-card-title { margin-top: 8px; font-size: 14px; color: #26364b; }
+.glass-card-detail { margin-top: 5px; font-size: 12px; color: #687587; }
+.overview-support-card { border: 1px solid rgba(255, 255, 255, .85); background: rgba(255, 255, 255, .74); border-radius: 14px; box-shadow: 0 8px 30px rgba(16, 28, 45, .05), inset 0 1px 0 rgba(255, 255, 255, .95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+.overview-glass-attention { padding: 20px; }
+.glass-attention-head { margin-bottom: 15px; }
+.glass-attention-title { align-items: flex-start; }
+.glass-attention-title h3 { font-size: 17px; }
+.overview-section-note { margin: 3px 0 0; color: #697789; font-size: 12px; }
+.attention-count-badge { font-size: 10px; letter-spacing: .5px; padding: 5px 9px; }
+.glass-signal-list { gap: 10px; }
+.glass-signal-item { display: flex; flex-wrap: wrap; gap: 12px 16px; padding: 15px 16px; }
+.signal-bar-accent { height: 40px; }
+.signal-item-copy { flex: 1 1 260px; gap: 4px; }
+.signal-item-title { font-size: 14px; white-space: normal; }
+.signal-item-meta, .signal-item-description { font-size: 12px; line-height: 1.45; color: #647184; }
+.signal-item-description { display: block; }
+.signal-item-state { display: flex; align-items: center; gap: 8px; }
+.overview-action-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 7px 11px; border: 1px solid #d9e8e3; border-radius: 9px; color: #176b5d; background: #f2faf7; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.overview-action-button:hover { background: #e8f6f1; border-color: #b9dacf; }
+.glass-calm-state { padding: 15px 16px; }
+.calm-text-wrap strong { font-size: 13px; }
+.calm-text-wrap small { font-size: 12px; }
+.overview-support-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 16px; }
+.overview-support-card { min-width: 0; padding: 20px; }
+.overview-support-heading { display: flex; align-items: center; gap: 11px; margin-bottom: 14px; }
+.support-icon { flex: 0 0 36px; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; }
+.insight-icon { color: #6a56a8; background: #f1eefb; }
+.activity-icon { color: #167c68; background: #e9f7f2; }
+.overview-support-heading h2 { margin: 0; color: #1e2c40; font: 800 16px Manrope, sans-serif; letter-spacing: -.25px; }
+.overview-support-heading p { margin: 4px 0 0; color: #6b7788; font-size: 12px; line-height: 1.4; }
+.overview-insight-list, .overview-activity-list { display: flex; flex-direction: column; }
+.overview-insight { display: flex; align-items: flex-start; gap: 11px; padding: 12px 0; border-top: 1px solid #edf0ed; }
+.insight-mark { width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; border-radius: 8px; background: #f1eefb; color: #6a56a8; font-size: 17px; font-weight: 700; }
+.bottleneck-mark { background: #fff5e7; color: #a86b1e; }
+.priority-mark { background: #fff0ec; color: #b6533b; }
+.overview-insight strong, .activity-copy strong { color: #28364a; font-size: 12px; line-height: 1.4; }
+.overview-insight p { margin: 3px 0 0; color: #687587; font-size: 12px; line-height: 1.45; }
+.overview-empty-copy { margin: 0; padding: 12px 0 2px; border-top: 1px solid #edf0ed; color: #687587; font-size: 12px; line-height: 1.5; }
+.overview-activity-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 0; border: 0; border-top: 1px solid #edf0ed; background: transparent; text-align: left; }
+.overview-activity-row:hover .activity-copy strong { color: #167c68; }
+.activity-dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: #43b89b; box-shadow: 0 0 0 4px #e8f6f1; }
+.activity-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.activity-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-copy small { color: #687587; font-size: 11px; }
+.overview-activity-row time { color: #778394; font-size: 10px; white-space: nowrap; }
+@media (max-width: 1024px) { .overview-glass-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .overview-support-grid { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  .overview-fullscreen-layout { padding: 24px 16px 112px; }
+  .overview-negative-hud { gap: 17px; }
+  .overview-hud-header h1 { font-size: 30px; }
+  .overview-subtitle { font-size: 13px; }
+  .overview-glass-stats-grid { gap: 10px; }
+  .overview-glass-card { min-height: 145px; padding: 14px; }
+  .glass-card-val { font-size: 29px; }
+  .glass-card-title { font-size: 12px; }
+  .glass-card-detail { font-size: 11px; }
+  .overview-glass-attention, .overview-support-card { padding: 15px; }
+  .glass-signal-item { gap: 10px; }
+  .signal-item-copy { flex-basis: calc(100% - 28px); }
+  .signal-item-state { margin-left: 15px; }
+  .overview-action-button { margin-left: auto; }
+  .overview-activity-row { flex-wrap: wrap; }
+  .overview-activity-row time { margin-left: 18px; }
+}
+@media (prefers-reduced-motion: reduce) { .overview-glass-card, .overview-action-button, .overview-activity-row { transition: none; } }
+
+/* Page content alignment refinements. Decorative background layers remain unchanged. */
+.page-content {
+  max-width: 1400px;
+  padding: 32px clamp(22px, 3.5vw, 48px) 40px;
+}
+.page-content .page-heading {
+  align-items: center;
+  margin-bottom: 26px;
+}
+.page-content .page-heading h1 {
+  font-size: clamp(28px, 2.5vw, 34px);
+  letter-spacing: -1.1px;
+}
+.page-content .page-subtitle {
+  max-width: 760px;
+  margin: 8px 0 0;
+  color: #657286;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* Repair queue: widen the table workspace while preserving its circuit scene. */
+.queue-fullscreen-layout {
+  padding: 36px clamp(20px, 4vw, 56px) 132px;
+}
+.queue-negative-hud {
+  width: min(100%, 1400px);
+  max-width: 1400px;
+  align-self: center;
+  gap: 20px;
+}
+.queue-title {
+  font-size: clamp(29px, 2.7vw, 36px);
+}
+.queue-toolbar {
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px 20px;
+}
+.data-table th {
+  padding-top: 12px;
+  padding-bottom: 12px;
+  font-size: 9px;
+}
+.data-table td {
+  padding-top: 14px;
+  padding-bottom: 14px;
+  font-size: 11px;
+}
+.repair-id-cell strong,
+.issue-cell strong {
+  font-size: 12px;
+}
+.repair-id-cell span,
+.issue-snippet,
+.contact-cell {
+  font-size: 10.5px;
+}
+
+/* Diagnostics: center the evidence workspace without touching its visual layers. */
+.diagnostics-fullscreen-layout {
+  padding: 36px clamp(20px, 4vw, 56px) 144px;
+}
+.diagnostics-negative-hud {
+  width: min(100%, 1400px);
+  max-width: 1400px;
+  align-self: center;
+  gap: 22px;
+}
+.diagnostics-title {
+  font-size: clamp(30px, 2.8vw, 38px);
+}
+.diagnostics-subpage-evidence,
+.diagnostics-subpage-ai {
+  gap: 22px;
+}
+
+/* Repair memory and Knowledge Base use the shared centered page-content shell. */
+.memory-record {
+  gap: 16px;
+  padding: 17px 22px;
+}
+.memory-record-title > strong {
+  font-size: 13px;
+}
+.memory-device-line,
+.memory-action-line {
+  font-size: 11px;
+  line-height: 1.45;
+}
+.memory-fault-line {
+  font-size: 11.5px;
+}
+.memory-record-outcome {
+  width: min(260px, 24%);
+}
+.memory-record-outcome p {
+  font-size: 11.5px;
+}
+.knowledge-grid {
+  gap: 18px;
+}
+.knowledge-card {
+  padding: 22px;
+}
+.knowledge-card h3 {
+  font-size: 15px;
+  line-height: 1.4;
+}
+.knowledge-scope {
+  font-size: 11px;
+  line-height: 1.5;
+}
+.knowledge-content {
+  font-size: 12px;
+  line-height: 1.65;
+}
+.knowledge-external-link {
+  font-size: 11px;
+}
+
+/* Settings is a modal page; retain its existing centered glass dialog. */
+.settings-modal-card {
+  width: min(720px, 94vw);
+}
+.settings-modal-card .settings-modal-head,
+.settings-modal-card .settings-modal-body {
+  padding-left: clamp(20px, 3vw, 30px);
+  padding-right: clamp(20px, 3vw, 30px);
+}
+.settings-modal-card .settings-desc {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 1024px) {
+  .queue-negative-hud,
+  .diagnostics-negative-hud {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .page-content {
+    padding: 26px 18px 32px;
+  }
+  .page-content .page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .queue-fullscreen-layout,
+  .diagnostics-fullscreen-layout {
+    padding: 26px 18px 132px;
+  }
+  .queue-header-row,
+  .diagnostics-header-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .queue-toolbar {
+    align-items: stretch;
+  }
+  .queue-toolbar .search-box {
+    width: 100%;
+  }
+  .filter-controls {
+    flex-wrap: wrap;
+  }
+  .diagnostic-select-bar {
+    flex-wrap: wrap;
+    padding: 14px 16px;
+  }
+  .case-picker {
+    min-width: min(220px, calc(100% - 52px));
+  }
+  .memory-record {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .memory-record-main {
+    flex: 1 1 calc(100% - 64px);
+  }
+  .memory-record-outcome {
+    width: auto;
+    margin-left: 48px;
+  }
+}
+
+@media (max-width: 640px) {
+  .queue-title-wrap {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .queue-header-row {
+    align-items: flex-start;
+  }
+  .queue-table-wrap {
+    max-height: calc(100vh - 340px);
+  }
+  .diagnostics-subnav {
+    width: 100%;
+    overflow-x: auto;
+  }
+  .diagnostics-tab-btn {
+    padding: 10px 14px;
+    white-space: nowrap;
+  }
+  .memory-record-outcome {
+    display: none;
+  }
+  .settings-modal-card .settings-modal-head {
+    padding-top: 16px;
+    padding-bottom: 16px;
+  }
+}
+
+/* New Repair modal: keep each label and control aligned within its form grid. */
+.modal-form .form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  color: #55677d;
+  font-size: 13px;
+  font-weight: 700;
+}
+.modal-form .form-grid input,
+.modal-form .form-grid select,
+.modal-form .form-grid textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #dce4ed;
+  border-radius: 9px;
+  padding: 11px 13px;
+  background: rgba(255, 255, 255, .86);
+  color: #38495f;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.modal-form .form-grid input:focus,
+.modal-form .form-grid select:focus,
+.modal-form .form-grid textarea:focus {
+  border-color: #8dcfbe;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(64, 214, 176, .12);
+}
+.modal-form .form-grid textarea {
+  resize: vertical;
+}
+@media (max-width: 640px) {
+  .modal-form .span-two {
+    grid-column: span 1;
+  }
+  .settings-row {
+    align-items: flex-start;
+  }
+}

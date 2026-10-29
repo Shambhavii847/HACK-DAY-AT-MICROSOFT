@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Dispatch, FormEvent, SetStateAction } from 'react'
 import {
   Activity, AlertCircle, AlertTriangle, ArrowRight,
@@ -12,7 +12,7 @@ import {
 import { api } from './lib/api'
 import type {
   CaseDetail, CaseStatus, DashboardSummary, Health, KnowledgeSource,
-  NextCheck, Priority, Recommendation, RepairCase, TestStatus,
+  NextCheck, Priority, Recommendation, RepairCase, TestResult, TestStatus,
 } from './lib/types'
 
 const navItems = [
@@ -1142,6 +1142,8 @@ export default function App() {
   const [knowledge, setKnowledge] = useState<KnowledgeSource[]>([])
   const [knowledgeNotice, setKnowledgeNotice] = useState('')
   const [selectedId, setSelectedId] = useState('')
+  const selectedIdRef = useRef(selectedId)
+  selectedIdRef.current = selectedId
   const [selectedDetail, setSelectedDetail] = useState<CaseDetail | null>(null)
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null)
   const [query, setQuery] = useState('')
@@ -1154,6 +1156,7 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [recordingTest, setRecordingTest] = useState(false)
+  const recordingTestRef = useRef(false)
   const [recordingOutcome, setRecordingOutcome] = useState(false)
   const [notice, setNotice] = useState<Notice>(null)
 
@@ -1251,6 +1254,7 @@ export default function App() {
     }
     try {
       const detail = await api.caseDetail(id)
+      if (selectedIdRef.current !== id) return
       setSelectedDetail(detail)
       setRecommendation(detail.latest_recommendation)
       setOutcomeForm({
@@ -1296,9 +1300,11 @@ export default function App() {
         setGenerating(true)
         void api.recommendation(created.id)
           .then((rec) => {
-            setRecommendation(rec)
+            if (selectedIdRef.current === created.id) setRecommendation(rec)
             void loadDetail(created.id)
-            flash('success', 'Automatic AI recommendation generated.')
+            flash('success', rec.provider === 'gemini_api'
+              ? 'Automatic Gemma recommendation generated.'
+              : 'Automatic guidance generated using local rules.')
           })
           .catch((err) => console.warn('Auto triage error:', err))
           .finally(() => setGenerating(false))
@@ -1349,31 +1355,39 @@ export default function App() {
 
   async function addTest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!selectedDetail) return
+    if (!selectedDetail || recordingTestRef.current) return
+    const caseId = selectedDetail.id
+    recordingTestRef.current = true
     setRecordingTest(true)
     try {
-      await api.addTest(selectedDetail.id, testForm)
+      const savedTest = await api.addTest(caseId, testForm)
+      setSelectedDetail((current) => current?.id === caseId
+        ? { ...current, tests: [...current.tests, savedTest].sort((a, b) => new Date(a.performed_at).getTime() - new Date(b.performed_at).getTime()) }
+        : current)
       setTestForm((current) => ({ ...current, observed_result: '', details: '' }))
-      setRecommendation(null)
       await refreshLists()
-      await loadDetail(selectedDetail.id)
+      if (selectedIdRef.current === caseId) await loadDetail(caseId)
       flash('success', 'Test result recorded.')
     } catch (error) {
       flash('error', errorMessage(error))
     } finally {
+      recordingTestRef.current = false
       setRecordingTest(false)
     }
   }
 
   async function generateRecommendation() {
     if (!selectedDetail) return
+    const caseId = selectedDetail.id
     setGenerating(true)
     try {
-      const result = await api.recommendation(selectedDetail.id)
-      setRecommendation(result)
+      const result = await api.recommendation(caseId)
       await refreshLists()
-      await loadDetail(selectedDetail.id)
-      setRecommendation((current) => (current ? { ...current, similar_cases: result.similar_cases } : result))
+      if (selectedIdRef.current === caseId) {
+        setRecommendation(result)
+        await loadDetail(caseId)
+        setRecommendation((current) => current?.id === result.id ? { ...current, similar_cases: result.similar_cases } : current)
+      }
       flash('success', result.provider === 'gemini_api' ? 'Gemma recommendation generated.' : 'Guidance generated using local rules.')
     } catch (error) {
       flash('error', errorMessage(error))
@@ -1470,12 +1484,10 @@ export default function App() {
       .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
   }, [cases, memoryQuery])
 
-  const selected = selectedDetail
+  const selected = selectedDetail?.id === selectedId ? selectedDetail : null
+  const evidenceSnapshot = recommendation?.content.evidence_test_ids
   const staleRecommendation = Boolean(
-    recommendation &&
-      selected?.tests.length &&
-      recommendation.generated_at &&
-      new Date(selected.tests[selected.tests.length - 1].performed_at) > new Date(recommendation.generated_at)
+    recommendation && selected && selected.tests.some((test) => !evidenceSnapshot?.includes(test.id))
   )
 
   const aiActive = Boolean(health?.model_configured)
@@ -1793,6 +1805,22 @@ function OverviewPage({
   const urgent = cases.filter(
     (item) => (item.priority === 'urgent' || item.priority === 'high') && item.status !== 'completed'
   )
+  const activeCases = cases.filter((item) => item.status !== 'completed')
+  const recurringIssues = Object.values(cases.reduce<Record<string, RepairCase[]>>((groups, item) => {
+    const key = item.issue_title.trim().toLowerCase()
+    groups[key] = [...(groups[key] || []), item]
+    return groups
+  }, {})).filter((group) => group.length > 1).sort((a, b) => b.length - a.length).slice(0, 2)
+  const bottlenecks = activeCases.filter((item) => {
+    const ageDays = (Date.now() - new Date(item.updated_at).getTime()) / 86400000
+    return item.status === 'waiting_parts' || item.status === 'on_hold' || ageDays >= 3
+  }).sort((a, b) => new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime()).slice(0, 3)
+  const suggested = [...activeCases].sort((a, b) => {
+    const score = (item: RepairCase) => (item.priority === 'urgent' ? 4 : item.priority === 'high' ? 3 : item.priority === 'normal' ? 2 : 1) + Math.min(3, Math.max(0, (Date.now() - new Date(item.updated_at).getTime()) / 86400000 / 3))
+    return score(b) - score(a)
+  }).slice(0, 2)
+  const recentActivity = [...cases].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()).slice(0, 4)
+  const value = (number: number | undefined) => dashboard ? number ?? 0 : '—'
 
   return (
     <div className="overview-fullscreen-layout">
@@ -1840,140 +1868,71 @@ function OverviewPage({
         ))}
       </div>
 
-      {/* Minimalist Floating Glass HUD Container in Negative Space */}
+      <div className="overview-bg-layer" aria-hidden="true" />
+      <div className="overview-ambient-mask" aria-hidden="true" />
       <div className="overview-negative-hud">
-        <div className="overview-hud-header">
+        <header className="overview-hud-header">
           <div className="overview-telemetry-chip">
             <span className={`overview-telemetry-dot ${aiActive ? 'online' : ''}`} />
-            <span>DIAGNOSTIC TELEMETRY // OVERVIEW</span>
+            <span>{aiActive ? 'REPAIR INTELLIGENCE ONLINE' : 'REPAIR INTELLIGENCE'}</span>
           </div>
           <h1>Overview</h1>
-        </div>
+          <p className="overview-subtitle">A clear view of the repairs, evidence, and decisions in your workshop.</p>
+        </header>
 
-        {/* 2x2 Minimalist Glass Stat Cards */}
         <div className="overview-glass-stats-grid">
-          <button
-            className="overview-glass-card card-tone-blue"
-            onClick={() => {
-              playUiSound('click', settings)
-              onNavigate('cases')
-            }}
-          >
-            <div className="glass-card-top">
-              <div className="glass-card-icon icon-blue">
-                <Activity size={17} />
-              </div>
-              <span className="glass-card-arrow"><ArrowRight size={13} /></span>
-            </div>
-            <div className="glass-card-val">{dashboard?.active_repairs ?? 0}</div>
-            <div className="glass-card-title">Active repairs</div>
-            <div className="glass-card-detail">Across current queue</div>
-          </button>
-
-          <button
-            className="overview-glass-card card-tone-green"
-            onClick={() => {
-              playUiSound('click', settings)
-              onNavigate('cases')
-            }}
-          >
-            <div className="glass-card-top">
-              <div className="glass-card-icon icon-green">
-                <ClipboardCheck size={17} />
-              </div>
-              <span className="glass-card-arrow"><ArrowRight size={13} /></span>
-            </div>
-            <div className="glass-card-val">{dashboard?.ready_for_testing ?? 0}</div>
-            <div className="glass-card-title">Ready for testing</div>
-            <div className="glass-card-detail">Final verification stage</div>
-          </button>
-
-          <button
-            className="overview-glass-card card-tone-violet"
-            onClick={() => {
-              playUiSound('click', settings)
-              onNavigate('memory')
-            }}
-          >
-            <div className="glass-card-top">
-              <div className="glass-card-icon icon-violet">
-                <CheckCircle2 size={17} />
-              </div>
-              <span className="glass-card-arrow"><ArrowRight size={13} /></span>
-            </div>
-            <div className="glass-card-val">{dashboard?.completed_this_week ?? 0}</div>
-            <div className="glass-card-title">Completed this week</div>
-            <div className="glass-card-detail">Updated in the last 7 days</div>
-          </button>
-
-          <button
-            className="overview-glass-card card-tone-amber"
-            onClick={() => {
-              playUiSound('click', settings)
-              onNavigate('memory')
-            }}
-          >
-            <div className="glass-card-top">
-              <div className="glass-card-icon icon-amber">
-                <History size={17} />
-              </div>
-              <span className="glass-card-arrow"><ArrowRight size={13} /></span>
-            </div>
-            <div className="glass-card-val">{dashboard?.saved_cases ?? 0}</div>
-            <div className="glass-card-title">Repair memory</div>
-            <div className="glass-card-detail">Cases with outcomes & history</div>
-          </button>
+          {[
+            { title: 'Active repairs', detail: 'Across the current queue', count: value(dashboard?.active_repairs), icon: Activity, tone: 'blue', tab: 'cases' as NavId },
+            { title: 'Ready for testing', detail: 'Awaiting final verification', count: value(dashboard?.ready_for_testing), icon: ClipboardCheck, tone: 'green', tab: 'cases' as NavId },
+            { title: 'Completed this week', detail: 'Updated in the last 7 days', count: value(dashboard?.completed_this_week), icon: CheckCircle2, tone: 'violet', tab: 'memory' as NavId },
+            { title: 'Repair memory', detail: 'Cases with confirmed outcomes', count: value(dashboard?.saved_cases), icon: History, tone: 'amber', tab: 'memory' as NavId },
+          ].map(({ title, detail, count, icon: Icon, tone, tab }) => (
+            <button key={title} className={`overview-glass-card card-tone-${tone}`} onClick={() => { playUiSound('click', settings); onNavigate(tab) }}>
+              <div className="glass-card-top"><div className={`glass-card-icon icon-${tone}`}><Icon size={19} /></div><span className="glass-card-arrow"><ArrowRight size={15} /></span></div>
+              <div className="glass-card-val">{count}</div><div className="glass-card-title">{title}</div><div className="glass-card-detail">{detail}</div>
+            </button>
+          ))}
         </div>
 
-        {/* Minimalist Glass Attention Needed Card */}
         <section className="overview-glass-attention">
           <div className="glass-attention-head">
-            <div className="glass-attention-title">
-              <span className="attention-indicator">
-                <AlertTriangle size={15} />
-              </span>
-              <h3>Attention needed</h3>
-            </div>
-            <span className={`attention-count-badge ${urgent.length > 0 ? 'badge-urgent' : 'badge-calm'}`}>
-              {urgent.length} {urgent.length === 1 ? 'ISSUE' : 'ISSUES'}
-            </span>
+            <div className="glass-attention-title"><span className="attention-indicator"><AlertTriangle size={16} /></span><div><h3>Attention needed</h3><p className="overview-section-note">High and urgent active cases</p></div></div>
+            <span className={`attention-count-badge ${urgent.length > 0 ? 'badge-urgent' : 'badge-calm'}`}>{urgent.length} {urgent.length === 1 ? 'CASE' : 'CASES'}</span>
           </div>
-
-          {urgent.length > 0 ? (
-            <div className="glass-signal-list">
-              {urgent.map((item) => (
-                <button
-                  key={item.id}
-                  className="glass-signal-item"
-                  onClick={() => {
-                    playUiSound('click', settings)
-                    onOpen(item.id, 'diagnostics')
-                  }}
-                >
-                  <span className="signal-bar-accent" />
-                  <div className="signal-item-copy">
-                    <strong className="signal-item-title">{item.issue_title}</strong>
-                    <span className="signal-item-meta">
-                      {item.id} · {item.brand} {item.model} · {statusNames[item.status]}
-                    </span>
-                  </div>
-                  <PriorityPill priority={item.priority} />
-                  <ArrowRight size={14} className="signal-item-arrow" />
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="glass-calm-state">
-              <div className="calm-icon-wrap">
-                <CheckCircle2 size={16} />
-              </div>
-              <div className="calm-text-wrap">
-                <strong>No urgent repairs in queue</strong>
-                <small>All active devices operating on schedule.</small>
-              </div>
-            </div>
-          )}
+          {urgent.length > 0 ? <div className="glass-signal-list">
+            {urgent.map((item) => (
+              <article key={item.id} className="glass-signal-item">
+                <span className="signal-bar-accent" />
+                <div className="signal-item-copy">
+                  <strong className="signal-item-title">{item.issue_title}</strong>
+                  <span className="signal-item-meta">{item.id} · {item.brand} {item.model}</span>
+                  <span className="signal-item-description">{item.symptoms}</span>
+                </div>
+                <div className="signal-item-state"><StatusPill status={item.status} /><PriorityPill priority={item.priority} /></div>
+                <button className="overview-action-button" onClick={() => { playUiSound('click', settings); onOpen(item.id, 'diagnostics') }}>View diagnosis <ArrowRight size={14} /></button>
+              </article>
+            ))}
+          </div> : <div className="glass-calm-state"><div className="calm-icon-wrap"><CheckCircle2 size={17} /></div><div className="calm-text-wrap"><strong>No high or urgent cases in the queue</strong><small>Priority insights will appear here when cases need attention.</small></div></div>}
         </section>
+
+        <div className="overview-support-grid">
+          <section className="overview-support-card">
+            <div className="overview-support-heading"><span className="support-icon insight-icon"><BrainCircuit size={17} /></span><div><h2>AI Repair Insights</h2><p>Record based patterns and queue signals for technician review.</p></div></div>
+            {cases.length === 0 ? <p className="overview-empty-copy">Add repair cases to surface recurring issues, bottlenecks, and priority suggestions.</p> : <div className="overview-insight-list">
+              {recurringIssues.length > 0 && <div className="overview-insight"><span className="insight-mark">↻</span><div><strong>Recurring issue · {recurringIssues[0][0].issue_title}</strong><p>Appears in {recurringIssues[0].length} available cases. Review their test evidence for shared patterns.</p></div></div>}
+              {bottlenecks.slice(0, 1).map((item) => <div className="overview-insight" key={`b-${item.id}`}><span className="insight-mark bottleneck-mark"><Clock3 size={15} /></span><div><strong>Waiting case · {item.id}</strong><p>{item.status === 'waiting_parts' ? 'Waiting for parts' : item.status === 'on_hold' ? 'On hold' : 'No update for at least 3 days'} · last updated {dateLabel(item.updated_at)}.</p></div></div>)}
+              {suggested.length > 0 && <div className="overview-insight"><span className="insight-mark priority-mark"><Zap size={15} /></span><div><strong>Suggested priority · {suggested[0].id}</strong><p>{priorityNames[suggested[0].priority]} priority, {Math.max(0, Math.floor((Date.now() - new Date(suggested[0].updated_at).getTime()) / 86400000))} days since update. Review urgency and case evidence.</p></div></div>}
+              {recurringIssues.length === 0 && bottlenecks.length === 0 && suggested.length === 0 && <p className="overview-empty-copy">No repeated issues or overdue cases are visible in the current records.</p>}
+            </div>}
+          </section>
+          <section className="overview-support-card">
+            <div className="overview-support-heading"><span className="support-icon activity-icon"><Activity size={17} /></span><div><h2>Recent Activity</h2><p>Latest case changes from the repair queue.</p></div></div>
+            {recentActivity.length ? <div className="overview-activity-list">{recentActivity.map((item) => {
+              const created = Math.abs(new Date(item.updated_at).getTime() - new Date(item.created_at).getTime()) < 1000
+              return <button key={item.id} className="overview-activity-row" onClick={() => onOpen(item.id, 'diagnostics')}><span className="activity-dot" /><span className="activity-copy"><strong>{created ? 'Repair case created' : 'Repair case updated'} · {item.id}</strong><small>{item.brand} {item.model} · {statusNames[item.status]}</small></span><time>{dateTimeLabel(item.updated_at)}</time></button>
+            })}</div> : <p className="overview-empty-copy">No repair activity is available yet.</p>}
+          </section>
+        </div>
       </div>
     </div>
   )
@@ -2951,7 +2910,7 @@ function DiagnosticsPage({
               </section>
 
               {recommendation ? (
-                <RecommendationView recommendation={recommendation} stale={stale} />
+                <RecommendationView recommendation={recommendation} stale={stale} tests={selected.tests} />
               ) : (
                 <section className="surface-card waiting-panel-clean">
                   <BrainCircuit size={28} className="muted-icon" />
@@ -2991,7 +2950,7 @@ function DiagnosticsPage({
   )
 }
 
-function RecommendationView({ recommendation, stale }: { recommendation: Recommendation; stale: boolean }) {
+function RecommendationView({ recommendation, stale, tests }: { recommendation: Recommendation; stale: boolean; tests: TestResult[] }) {
   const [expandedHypothesis, setExpandedHypothesis] = useState(0)
   const content = recommendation.content
   const isLive = recommendation.provider === 'gemini_api'
@@ -3015,6 +2974,33 @@ function RecommendationView({ recommendation, stale }: { recommendation: Recomme
       )}
 
       <p className="recommendation-summary">{content.summary}</p>
+
+      <div className="missing-info-box">
+        <div className="missing-info-heading">
+          <ClipboardCheck size={14} />
+          <strong>Evidence considered</strong>
+        </div>
+        {content.evidence_test_ids?.length ? (
+          <ul>
+            {content.evidence_test_ids.map((testId) => {
+              const test = tests.find((item) => item.id === testId)
+              if (!test) return <li key={testId}>Saved test {testId} was included; its details are unavailable in this view.</li>
+              const isNew = content.new_evidence_test_ids?.includes(testId)
+              return (
+                <li key={testId}>
+                  <strong>{test.test_name}</strong> · {titleCase(test.result.replaceAll('_', ' '))}
+                  {isNew ? ' · Added since previous review' : ''}
+                  {test.observed_result ? ` — ${test.observed_result}` : ''}
+                  {test.details ? ` Notes: ${test.details}` : ''}
+                  {' · '}{dateTimeLabel(test.performed_at)}
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <p>No saved test records were included in this recommendation.</p>
+        )}
+      </div>
 
       <div className="hypothesis-section">
         <div className="recommendation-section-title">

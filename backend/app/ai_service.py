@@ -31,9 +31,47 @@ def _case_test_text(tests: list[TestResult]) -> str:
     if not tests:
         return "No diagnostic tests have been recorded."
     return "\n".join(
-        f"- {test.test_name}: status={test.result}; observation={test.observed_result}; notes={test.details or 'none'}"
+        f"- Test ID {test.id} | {test.performed_at.isoformat()} | {test.test_name} | "
+        f"recorded result={test.result} | observation={test.observed_result} | notes={test.details or 'none'}"
         for test in tests
     )
+
+
+def _previous_recommendation_context(case: RepairCase) -> tuple[dict[str, Any] | None, set[int]]:
+    if not case.recommendations:
+        return None, set()
+
+    previous = case.recommendations[-1]
+    try:
+        content = RecommendationContent.model_validate_json(previous.content_json)
+    except Exception:
+        logger.warning("Could not parse previous recommendation %s for %s", previous.id, case.id)
+        return {
+            "id": previous.id,
+            "generated_at": previous.created_at.isoformat() if previous.created_at else None,
+            "provider": previous.provider,
+            "summary": "Previous recommendation content could not be parsed.",
+        }, set()
+
+    known_evidence = set(content.evidence_test_ids)
+    if not known_evidence and previous.created_at:
+        # Older saved recommendations predate evidence snapshots. Infer only which
+        # tests existed by timestamp; never present that inference as a saved snapshot.
+        known_evidence = {
+            test.id for test in case.tests
+            if test.performed_at and test.performed_at <= previous.created_at
+        }
+    context = {
+        "id": previous.id,
+        "generated_at": previous.created_at.isoformat() if previous.created_at else None,
+        "provider": previous.provider,
+        "summary": content.summary,
+        "hypotheses": [item.model_dump() for item in content.hypotheses],
+        "next_checks": [item.model_dump() for item in content.next_checks],
+        "missing_information": content.missing_information,
+        "evidence_test_ids": content.evidence_test_ids,
+    }
+    return context, known_evidence
 
 
 def _similar_cases(db: Session, case: RepairCase) -> list[dict[str, Any]]:
@@ -87,13 +125,19 @@ def _similar_cases(db: Session, case: RepairCase) -> list[dict[str, Any]]:
 def _fallback_recommendation(case: RepairCase, tests: list[TestResult], similar: list[dict[str, Any]], reason: str) -> RecommendationContent:
     """Deterministic, conservative guidance used without a working model call."""
     issue = _norm(f"{case.issue_title} {case.symptoms}")
-    observed = " ".join(_norm(f"{t.test_name} {t.result} {t.observed_result} {t.details}") for t in tests)
-    safety_hold = _has_safety_signal(issue) or _has_safety_signal(observed)
+    recorded_text = " ".join(
+        _norm(f"{test.test_name} {test.observed_result} {test.details}") for test in tests
+    )
+    safety_hold = _has_safety_signal(issue) or _has_safety_signal(recorded_text)
 
     source_ids = ["FX-EVIDENCE-001", "FX-GUIDE-001"]
     hypotheses: list[Hypothesis] = []
     next_checks: list[NextCheck] = []
     missing: list[str] = []
+    actual_observations = [
+        test for test in tests
+        if test.result in {"pass", "fail", "inconclusive"} and test.observed_result.strip()
+    ]
     safety_notes = [
         "This is triage support, not a confirmed diagnosis. A qualified technician must verify the fault before repair or part replacement.",
         "Demo records are fictional examples. Do not interpret historical similarity as proof that the current device has the same fault.",
@@ -121,74 +165,181 @@ def _fallback_recommendation(case: RepairCase, tests: list[TestResult], similar:
         ))
         safety_notes.insert(0, "Safety-first: do not charge or continue testing a device with suspected battery swelling, smoke, unusual heat, chemical odor, or visible damage.")
     else:
-        summary = (
-            "The app is using conservative local rules because the Gemma API could not be used for this request. "
-            "Treat the guidance below as a checklist, not an AI diagnosis. Record the next observation before changing parts."
-        )
-        has_known_good = any("known-good" in _norm(t.test_name) or "alternate cable" in _norm(t.test_name) for t in tests)
-        positive_external = any(
-            ("pass" == t.result and any(term in _norm(f"{t.test_name} {t.observed_result}") for term in ("charging indicator appeared", "behavior improved", "works with", "problem cleared")))
-            for t in tests
-        )
-        persistent = any(
-            term in _norm(f"{t.observed_result} {t.details}")
-            for t in tests for term in ("still appears", "still persists", "does not charge", "issue persists")
-        )
+        if tests:
+            result_counts: dict[str, int] = {}
+            for test in tests:
+                result_counts[test.result] = result_counts.get(test.result, 0) + 1
+            count_summary = ", ".join(f"{count} {status.replace('_', ' ')}" for status, count in result_counts.items())
+            summary = (
+                f"LOCAL RULES reviewed {len(tests)} saved test(s) for {case.brand} {case.model} "
+                f"({case.device_category}): {count_summary}. The recorded result label is not a component diagnosis; "
+                "use each observation and its test conditions to decide what it establishes. The fault remains unconfirmed."
+            )
+        else:
+            summary = (
+                f"LOCAL RULES reviewed the reported symptom for {case.brand} {case.model} ({case.device_category}); "
+                "no diagnostic test results are saved yet. Symptoms alone do not establish a failed component."
+            )
 
-        if positive_external:
-            hypotheses.append(Hypothesis(
-                fault="External cable or adapter path may be contributing",
-                likelihood="plausible",
-                supporting_evidence=[t.observed_result for t in tests if t.result == "pass" and any(term in _norm(f"{t.test_name} {t.observed_result}") for term in ("charging indicator appeared", "behavior improved", "works with", "problem cleared"))][:3],
-                contradicting_evidence=[],
-                reasoning="The recorded symptom changed when an external power-path variable changed. Repeating the comparison can help confirm reproducibility; this does not automatically prove which accessory is faulty.",
+        changed_observation = next((
+            test for test in reversed(actual_observations)
+            if any(term in _norm(test.observed_result) for term in (
+                "charging began", "indicator appeared", "behavior improved", "symptom stopped",
+                "problem cleared", "issue cleared", "works with", "no longer occurs",
             ))
-        elif persistent:
+        ), None)
+        persistent_observation = next((
+            test for test in reversed(actual_observations)
+            if any(term in _norm(test.observed_result) for term in (
+                "still appears", "still persists", "issue persists", "no change", "did not change",
+                "does not charge", "did not resolve", "symptom continued",
+            ))
+        ), None)
+        inconclusive_tests = [test for test in tests if test.result == "inconclusive"]
+        not_tested = [test for test in tests if test.result == "not_tested"]
+        ignored_results = [test for test in tests if test.result == "not_applicable"]
+
+        if changed_observation:
             hypotheses.append(Hypothesis(
-                fault="The issue may not be resolved by the tested external power-path setup",
-                likelihood="possible",
-                supporting_evidence=[t.observed_result for t in tests if any(term in _norm(f"{t.observed_result} {t.details}") for term in ("still appears", "still persists", "does not charge", "issue persists"))][:3],
+                fault=f"The reported symptom changed during {changed_observation.test_name}",
+                likelihood="plausible",
+                supporting_evidence=[f"Test {changed_observation.id} observation: {changed_observation.observed_result}"],
                 contradicting_evidence=[],
-                reasoning="The recorded issue remained under the stated test conditions. This alone cannot distinguish connector, battery, software, or internal circuit causes.",
+                reasoning=(
+                    "The observation reports a symptom change under this test's stated conditions. "
+                    "The result label alone does not identify a faulty component, and the observation does not confirm a repair."
+                ),
+            ))
+        elif persistent_observation:
+            hypotheses.append(Hypothesis(
+                fault=f"The reported issue continued during {persistent_observation.test_name}",
+                likelihood="possible",
+                supporting_evidence=[f"Test {persistent_observation.id} observation: {persistent_observation.observed_result}"],
+                contradicting_evidence=[],
+                reasoning=(
+                    "The observation reports that the symptom remained for this test. This does not distinguish "
+                    "between possible causes or prove that a particular component is faulty."
+                ),
             ))
         else:
+            evidence = [f"Reported symptom: {case.symptoms}"]
+            evidence.extend(
+                f"Test {test.id} ({test.result.replace('_', ' ')}): {test.observed_result}"
+                for test in inconclusive_tests[:2]
+            )
             hypotheses.append(Hypothesis(
-                fault="Cause not established; isolate the external power path first",
+                fault="Cause not established by the saved evidence",
                 likelihood="possible",
-                supporting_evidence=[f"Reported symptom: {case.issue_title}"],
+                supporting_evidence=evidence[:3],
                 contradicting_evidence=[],
-                reasoning="The available observations are insufficient to identify a failed component. Begin with safe, low-risk checks and record one variable at a time.",
+                reasoning=(
+                    "The available observations do not establish a cause. Inconclusive, not-tested, and not-applicable "
+                    "entries are not treated as proof for or against a component."
+                ),
             ))
 
-        next_checks.append(NextCheck(
-            name="Compare one known-good compatible cable",
-            purpose="Check whether the symptom changes when only the cable is changed.",
-            instructions="If no safety warning is present, use a known-good, compatible cable and observe the same charging setup. Do not force the connector or insert tools into the port. If the device becomes unusually hot or damaged, stop.",
-            what_to_record="Cable used, power source, whether the charging indicator appears, and whether the symptom repeats.",
-            safety_level="caution",
-        ))
-        if not any("adapter" in _norm(t.test_name) for t in tests):
-            next_checks.append(NextCheck(
-                name="Isolate the compatible power adapter and outlet",
-                purpose="Avoid changing cable, adapter, and outlet simultaneously, which makes the result ambiguous.",
-                instructions="With no signs of damage or overheating, compare against a known-good compatible adapter and a verified outlet, changing one variable at a time. Do not use damaged accessories.",
-                what_to_record="Adapter and outlet tested, compatibility basis, and the observed result.",
-                safety_level="caution",
-            ))
-        if not any("visual inspection" in _norm(t.test_name) or "port inspection" in _norm(t.test_name) for t in tests):
-            next_checks.append(NextCheck(
-                name="External visual inspection (device powered off)",
-                purpose="Look for obvious external damage without opening the device.",
-                instructions="Power the device off where practical and inspect externally under normal lighting. Do not insert metal or conductive objects into the port, and do not attempt internal repair based on visual appearance alone.",
-                what_to_record="Visible damage, debris, corrosion, or none observed; do not infer hidden internal condition.",
-                safety_level="caution",
-            ))
-        if not has_known_good:
-            missing.append("Whether the symptom changes with a known-good compatible cable and adapter tested one at a time.")
-        if not any("visual inspection" in _norm(t.test_name) or "port inspection" in _norm(t.test_name) for t in tests):
-            missing.append("A basic external visual inspection result, if safe and appropriate.")
+        # Select only unperformed, symptom-relevant checks. A check already
+        # recorded as pass/fail/inconclusive is not repeated by the fallback.
+        is_charging_issue = any(term in issue for term in ("charg", "power", "battery", "usb-c", "usb c"))
+        candidates: list[tuple[tuple[str, ...], NextCheck]] = []
+        if is_charging_issue:
+            candidates = [
+                (("known-good compatible cable", "alternate cable"), NextCheck(
+                    name="Compare one known-good compatible cable",
+                    purpose="Check whether changing only the cable changes the reported charging symptom.",
+                    instructions="If no safety concern is present, use a known-good compatible cable in the same setup. Do not force the connector or insert anything into the port.",
+                    what_to_record="Cable used, unchanged setup, whether charging begins, and whether the reported symptom repeats.",
+                    safety_level="caution",
+                )),
+                (("adapter", "power supply"), NextCheck(
+                    name="Isolate the compatible power adapter",
+                    purpose="Check the adapter separately so multiple changed variables do not make the result ambiguous.",
+                    instructions="If there are no safety concerns, compare with a known-good compatible adapter while keeping the cable and outlet unchanged.",
+                    what_to_record="Adapter used, compatibility basis, unchanged cable/outlet, and the observed result.",
+                    safety_level="caution",
+                )),
+                (("known-good power outlet", "outlet"), NextCheck(
+                    name="Check a verified power outlet",
+                    purpose="Determine whether the power source changes the symptom without changing the device or cable.",
+                    instructions="Only if safe, use a verified outlet and keep the other charging setup unchanged. Do not use damaged power equipment.",
+                    what_to_record="Outlet used and whether the same charging behavior occurred.",
+                    safety_level="caution",
+                )),
+                (("visual inspection", "port inspection"), NextCheck(
+                    name="External visual inspection (device powered off)",
+                    purpose="Record visible external conditions without inferring an internal fault.",
+                    instructions="Power off where practical and inspect under normal lighting. Do not insert tools or conductive objects into a port or open the device based on appearance alone.",
+                    what_to_record="Visible condition, or that none was observed; do not infer hidden internal condition.",
+                    safety_level="caution",
+                )),
+                (("restart", "after restart"), NextCheck(
+                    name="Observe charging behavior after restart",
+                    purpose="Check whether the reported behavior changes after a normal restart, without changing hardware.",
+                    instructions="If the device is safe to handle, restart it using its normal controls and observe the same charging setup.",
+                    what_to_record="Whether the device restarted normally and whether the original symptom returned.",
+                    safety_level="routine",
+                )),
+                (("temperature", "battery safety"), NextCheck(
+                    name="Battery and temperature safety screening",
+                    purpose="Check for warning signs before any further charging tests.",
+                    instructions="Stop if there is unusual heat, swelling, smoke, odor, liquid, or visible damage. Do not charge or open a device with these signs; refer it to a qualified technician.",
+                    what_to_record="Any safety warning signs and whether testing was stopped or escalated.",
+                    safety_level="professional_only",
+                )),
+            ]
+
+        def already_attempted(terms: tuple[str, ...]) -> bool:
+            return any(
+                any(term in _norm(test.test_name) for term in terms)
+                and test.result in {"pass", "fail", "inconclusive", "not_applicable"}
+                for test in tests
+            )
+
+        for terms, check in candidates:
+            if not already_attempted(terms):
+                next_checks.append(check)
+            if len(next_checks) == 3:
+                break
+
+        if not next_checks:
+            if not_tested:
+                pending = not_tested[0]
+                next_checks.append(NextCheck(
+                    name=f"Perform the recorded not-tested check: {pending.test_name}",
+                    purpose="The saved record marks this check as not yet performed, so it cannot be used as diagnostic evidence.",
+                    instructions="Perform it only if it is safe, relevant to this device, and within the technician's qualifications. Otherwise record why it is not applicable.",
+                    what_to_record="The actual conditions, result, and observation; do not record a result before performing the check.",
+                    safety_level="caution",
+                ))
+            else:
+                next_checks.append(NextCheck(
+                    name="Review saved observations and select a targeted next check",
+                    purpose="The available fallback rules cannot identify a safe, specific additional check from the recorded facts.",
+                    instructions="Review the reported symptom and all saved test observations, then choose a low-risk, device-appropriate check from approved service guidance. Do not repeat a completed test without a specific reason or changed condition.",
+                    what_to_record="Why the selected check is relevant, the changed condition if repeating a prior test, and the result actually observed.",
+                    safety_level="caution",
+                ))
+
+        if inconclusive_tests:
+            missing.extend(
+                f"Test {test.id} ({test.test_name}) was inconclusive: {test.observed_result}"
+                for test in inconclusive_tests[:3]
+            )
+        if not_tested:
+            missing.extend(
+                f"Test {test.id} ({test.test_name}) is recorded as not tested; no result is available."
+                for test in not_tested[:3]
+            )
+        if ignored_results:
+            missing.extend(
+                f"Test {test.id} ({test.test_name}) is marked not applicable; it was not used as evidence."
+                for test in ignored_results[:2]
+            )
         if not tests:
             missing.append("No diagnostic test results are recorded yet; symptoms alone cannot establish the fault.")
+
+    if not tests and not any("no diagnostic test results" in item.lower() for item in missing):
+        missing.append("No diagnostic test results are recorded yet; symptoms alone cannot establish the fault.")
 
     if similar:
         safety_notes.append("A completed case with keyword overlap is available in Repair Memory; compare its actual test conditions before drawing a conclusion.")
@@ -226,9 +377,12 @@ def _parse_json_response(text: str) -> dict[str, Any]:
 
 
 def generate_recommendation(db: Session, case: RepairCase) -> tuple[str, str, RecommendationContent, list[dict[str, Any]]]:
-    tests = list(case.tests)
+    tests = sorted(case.tests, key=lambda test: (test.performed_at, test.id))
     similar = _similar_cases(db, case)
     source_index = source_map()
+    previous_recommendation, previous_evidence_ids = _previous_recommendation_context(case)
+    current_evidence_ids = {test.id for test in tests}
+    new_evidence_ids = sorted(current_evidence_ids - previous_evidence_ids)
     reason = "No GEMINI_API_KEY is configured; using explicit local fallback guidance."
 
     if settings.has_gemini_key:
@@ -241,10 +395,14 @@ def generate_recommendation(db: Session, case: RepairCase) -> tuple[str, str, Re
 Your task is to recommend safe next checks using ONLY the supplied case facts and reference notes. Do not invent measurements, test results, device specifications, manufacturer procedures, component compatibility, prices, or citations. A possible fault is not a confirmed diagnosis. Similar cases are only weak precedents.
 
 Return ONLY a valid JSON object (do not wrap in an array) using exactly these keys:
-{{"summary":"string","hypotheses":[{{"fault":"string","likelihood":"possible|plausible|less_likely","supporting_evidence":["strings"],"contradicting_evidence":["strings"],"reasoning":"string"}}],"next_checks":[{{"name":"string","purpose":"string","instructions":"string","what_to_record":"string","safety_level":"routine|caution|professional_only"}}],"missing_information":["strings"],"safety_notes":["strings"],"source_ids":["known source IDs only"],"limitations":["strings"]}}
+{{"summary":"string","hypotheses":[{{"fault":"string","likelihood":"possible|plausible|less_likely","supporting_evidence":["strings"],"contradicting_evidence":["strings"],"reasoning":"string"}}],"next_checks":[{{"name":"string","purpose":"string","instructions":"string","what_to_record":"string","safety_level":"routine|caution|professional_only"}}],"missing_information":["strings"],"safety_notes":["strings"],"source_ids":["known source IDs only"],"limitations":["strings"],"evidence_test_ids":[integer test IDs]}}
 
 Rules:
 - Use no more than 3 hypotheses and 3 next checks.
+- Use the exact current case facts and every saved test below, including test ID, status label, observation, notes, and timestamp. The backend will set evidence_test_ids; do not invent or change them.
+- Treat the test result label as technician-entered context, not a universal statement that a component passed or failed. Explain what the observation establishes and what it does not.
+- Inconclusive means the test did not establish a cause. Not tested means no observation exists. Not applicable is not evidence. Do not infer a component fault from any result label alone.
+- Do not recommend repeating a pass, fail, or inconclusive test unless there is a specific reason; state the reason and the changed condition needed for a useful repeat.
 - Quote or paraphrase only observed evidence supplied below; if a test is not recorded, call it missing, not failed.
 - Explain what evidence does and does not establish. Never make up numeric confidence or a probability.
 - If there are signs of unusual heat, swelling, smoke, chemical odor, liquid damage, corrosion, exposed conductors, or structural damage, put safety first and advise stop/escalation. Never advise inserting tools into a port, opening/puncturing a battery, or unqualified live electrical work.
@@ -260,6 +418,12 @@ Reported symptoms: {case.symptoms}
 Status: {case.status}
 Technician-entered tests:
 {_case_test_text(tests)}
+
+PREVIOUS SAVED RECOMMENDATION (historical decision-support context only; not a confirmed finding):
+{json.dumps(previous_recommendation, ensure_ascii=False) if previous_recommendation else 'None'}
+
+Saved test IDs added since that recommendation (must be reviewed in this generation):
+{json.dumps(new_evidence_ids)}
 
 SIMILAR COMPLETED CASES (keyword retrieval; verify before applying; demo records are fictional):
 {json.dumps(similar, ensure_ascii=False)}
@@ -291,6 +455,9 @@ REVIEWED FIXORA PROTOTYPE REFERENCE NOTES (these are generic workflow/safety not
                 content.source_ids = ["FX-EVIDENCE-001"]
             if not content.hypotheses or not content.next_checks:
                 raise ValueError("The model response lacked required diagnostic structure")
+            content.evidence_test_ids = sorted(current_evidence_ids)
+            content.new_evidence_test_ids = new_evidence_ids
+            content.previous_recommendation_id = previous_recommendation.get("id") if previous_recommendation else None
             provider = "gemini_api"
             return provider, settings.gemma_model, content, similar
         except Exception as exc:  # A failed model call should not break the repair workflow.
@@ -298,6 +465,9 @@ REVIEWED FIXORA PROTOTYPE REFERENCE NOTES (these are generic workflow/safety not
             reason = f"Gemma API unavailable for this request ({type(exc).__name__}); local fallback guidance is being shown."
 
     content = _fallback_recommendation(case, tests, similar, reason)
+    content.evidence_test_ids = sorted(current_evidence_ids)
+    content.new_evidence_test_ids = new_evidence_ids
+    content.previous_recommendation_id = previous_recommendation.get("id") if previous_recommendation else None
     return "rule_based_fallback", "Fixora conservative rules (not an LLM)", content, similar
 
 

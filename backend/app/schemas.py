@@ -118,6 +118,9 @@ class RecommendationContent(BaseModel):
     safety_notes: list[str] = Field(default_factory=list, max_length=8)
     source_ids: list[str] = Field(default_factory=list, max_length=10)
     limitations: list[str] = Field(default_factory=list, max_length=6)
+    evidence_test_ids: list[int] = Field(default_factory=list, max_length=200)
+    new_evidence_test_ids: list[int] = Field(default_factory=list, max_length=200)
+    previous_recommendation_id: int | None = None
 
 
 class RecommendationRead(BaseModel):

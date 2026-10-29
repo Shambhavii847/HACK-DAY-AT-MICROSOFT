@@ -74,6 +74,9 @@ export interface Recommendation {
     safety_notes: string[]
     source_ids: string[]
     limitations: string[]
+    evidence_test_ids?: number[]
+    new_evidence_test_ids?: number[]
+    previous_recommendation_id?: number | null
   }
   sources: Array<{ id: string; title: string; kind: string; source_url?: string | null; review_note: string }>
   similar_cases?: Array<{

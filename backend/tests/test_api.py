@@ -77,8 +77,8 @@ def test_create_case_add_test_and_recommendation():
         test = client.post(f"/api/cases/{case_id}/tests", json={
             "test_name": "Known-good compatible cable",
             "result": "inconclusive",
-            "observed_result": "Not tried yet; technician notes the check is pending.",
-            "details": "No test performed yet.",
+            "observed_result": "Laptop charging issue is still present with the selected test setup. Charging indicator remains off. Further testing is required to identify the cause.",
+            "details": "Tested with the selected cable setup; cause remains unknown.",
         })
         assert test.status_code == 201, test.text
 
@@ -89,6 +89,61 @@ def test_create_case_add_test_and_recommendation():
         assert data["content"]["hypotheses"]
         assert data["content"]["next_checks"]
         assert "probability" not in data["content"]
+        assert data["provider"] == "rule_based_fallback"
+        assert data["content"]["evidence_test_ids"] == [test.json()["id"]]
+        assert data["content"]["new_evidence_test_ids"] == [test.json()["id"]]
+        assert data["content"]["previous_recommendation_id"] is None
+        assert any(
+            "inconclusive" in item.lower() and test.json()["observed_result"] in item
+            for item in data["content"]["hypotheses"][0]["supporting_evidence"]
+        )
+        assert "cause not established" in data["content"]["hypotheses"][0]["fault"].lower()
+        assert any("inconclusive" in item.lower() for item in data["content"]["missing_information"])
+        assert all("known-good compatible cable" not in check["name"].lower() for check in data["content"]["next_checks"])
+        serialized = client.get(f"/api/cases/{case_id}").json()
+        assert len(serialized["tests"]) == 1
+        assert serialized["tests"][0]["observed_result"] == test.json()["observed_result"]
+        assert serialized["latest_recommendation"]["content"]["evidence_test_ids"] == [test.json()["id"]]
+
+        # A later test belongs only to this repair and is explicitly tracked as new evidence.
+        second = client.post(f"/api/cases/{case_id}/tests", json={
+            "test_name": "Compatible adapter comparison",
+            "result": "not_tested",
+            "observed_result": "Not performed; awaiting an available adapter.",
+            "details": "Awaiting an available adapter.",
+        })
+        assert second.status_code == 201, second.text
+        persisted = client.get(f"/api/cases/{case_id}")
+        assert persisted.status_code == 200
+        assert {item["id"] for item in persisted.json()["tests"]} == {test.json()["id"], second.json()["id"]}
+
+        regenerated = client.post(f"/api/cases/{case_id}/recommendation")
+        assert regenerated.status_code == 200, regenerated.text
+        regenerated_data = regenerated.json()
+        assert regenerated_data["content"]["evidence_test_ids"] == sorted([test.json()["id"], second.json()["id"]])
+        assert regenerated_data["content"]["new_evidence_test_ids"] == [second.json()["id"]]
+        assert regenerated_data["content"]["previous_recommendation_id"] == data["id"]
+
+        other_case = client.post("/api/cases", json={
+            "device_category": "Laptop",
+            "brand": "OtherBrand",
+            "model": "Other Model",
+            "issue_title": "Keyboard is unresponsive",
+            "symptoms": "Several keys do not respond.",
+            "priority": "normal",
+        })
+        assert other_case.status_code == 201, other_case.text
+        other_test = client.post(f"/api/cases/{other_case.json()['id']}/tests", json={
+            "test_name": "External keyboard comparison",
+            "result": "pass",
+            "observed_result": "External keyboard input works as expected.",
+            "details": "Compared on the same laptop.",
+        })
+        assert other_test.status_code == 201, other_test.text
+        other_recommendation = client.post(f"/api/cases/{other_case.json()['id']}/recommendation")
+        assert other_recommendation.status_code == 200, other_recommendation.text
+        assert other_recommendation.json()["content"]["evidence_test_ids"] == [other_test.json()["id"]]
+        assert test.json()["id"] not in other_recommendation.json()["content"]["evidence_test_ids"]
 
 
 def test_safety_case_gets_stop_and_escalate_guidance():
@@ -104,7 +159,11 @@ def test_safety_case_gets_stop_and_escalate_guidance():
         assert created.status_code == 201
         recommendation = client.post(f"/api/cases/{created.json()['id']}/recommendation")
         assert recommendation.status_code == 200
-        names = [check["name"] for check in recommendation.json()["content"]["next_checks"]]
+        body = recommendation.json()
+        names = [check["name"] for check in body["content"]["next_checks"]]
+        assert body["content"]["evidence_test_ids"] == []
+        assert any("no diagnostic test results" in item.lower() for item in body["content"]["missing_information"])
+        assert body["provider"] == "rule_based_fallback"
         assert any("safety" in name.lower() or "escalate" in name.lower() for name in names)
 
 
