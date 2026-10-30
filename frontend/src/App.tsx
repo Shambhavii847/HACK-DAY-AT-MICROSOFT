@@ -2986,7 +2986,7 @@ function DiagnosticsPage({
                 )}
               </section>
 
-              <TimelineCard events={selected.timeline} isDemo={selected.data_origin === 'demo'} />
+              <TimelineCard events={selected.timeline} />
               <SimilarRepairMemory matches={selected.similar_cases} onOpen={(id) => onOpenCase(id, 'diagnostics')} />
 
               <section className="surface-card outcome-card">
@@ -3248,23 +3248,62 @@ function SafetyAlertsPanel({ alerts }: { alerts: SafetyAlert[] }) {
   )
 }
 
-function TimelineCard({ events, isDemo }: { events: TimelineEvent[]; isDemo: boolean }) {
+function TimelineCard({ events }: { events: TimelineEvent[] }) {
+  const eventTitles: Record<string, string> = {
+    case_created: 'Repair Case Created',
+    symptoms_recorded: 'Symptoms Recorded',
+    diagnostic_test: 'Diagnostic Test Recorded',
+    recommendation_generated: 'Diagnostic Recommendation Generated',
+    status_changed: 'Repair Status Updated',
+    outcome_recorded: 'Repair Outcome Updated',
+  }
+  const eventTypes: Record<string, string> = {
+    case_created: 'Case Created',
+    symptoms_recorded: 'Reported Symptoms',
+    diagnostic_test: 'Diagnostic Test',
+    recommendation_generated: 'AI Recommendation',
+    status_changed: 'Status Update',
+    outcome_recorded: 'Repair Outcome',
+  }
+  const displayDetail = (key: string, value: string) => {
+    if (key === 'source') {
+      if (value === 'rule_based_fallback') return 'Local Rule-Based Fallback'
+      if (value === 'gemini_api' || value === 'gemma_api') return 'Gemma API'
+    }
+    if (key === 'evidence considered' && value === 'No test evidence included') return 'No test evidence available'
+    return value
+  }
+
   return (
     <section className="surface-card repair-timeline-card">
-      <div className="section-card-head"><div><h3>Repair timeline</h3><p>{isDemo ? 'Sample timeline from demo records.' : 'Timeline events appear only when supported by saved records.'}</p></div></div>
+      <div className="section-card-head"><div><h3>Repair Timeline</h3><p>Repair activity &amp; diagnostic history</p></div></div>
       {events.length ? (
         <ol className="repair-timeline-list">
           {events.map((event) => (
             <li className="repair-timeline-event" key={event.id}>
               <span className="timeline-event-dot" />
-              <div><strong>{event.title}</strong><p>{event.description}</p>
-                {event.details && <small>{Object.entries(event.details).map(([key, value]) => `${titleCase(key.replaceAll('_', ' '))}: ${value}`).join(' · ')}</small>}
-                <time>{dateTimeLabel(event.happened_at)}</time>
+              <div className="repair-timeline-content">
+                <div className="repair-timeline-entry-head">
+                  <strong>{eventTitles[event.event_type] || event.title}</strong>
+                  <time>{dateTimeLabel(event.happened_at)}</time>
+                </div>
+                <small className="repair-timeline-type">{eventTypes[event.event_type] || titleCase(event.event_type.replaceAll('_', ' '))}</small>
+                <p>{event.description}</p>
+                {event.details && Object.keys(event.details).length > 0 && (
+                  <dl className="repair-timeline-details">
+                    {Object.entries(event.details).map(([key, value]) => (
+                      <div className="repair-timeline-detail" key={key}>
+                        <dt>{key === 'evidence considered' ? 'Evidence Used' : titleCase(key.replaceAll('_', ' '))}</dt>
+                        <dd>{displayDetail(key, value)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
               </div>
             </li>
           ))}
         </ol>
-      ) : <div className="inline-empty">No timeline events are available for this repair case.</div>}
+      ) : <div className="inline-empty repair-timeline-empty"><strong>No activity recorded yet</strong><span>Diagnostic tests and repair updates will appear here as the case progresses.</span></div>}
     </section>
   )
 }

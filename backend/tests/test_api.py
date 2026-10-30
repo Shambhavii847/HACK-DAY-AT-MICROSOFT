@@ -531,7 +531,10 @@ def test_timeline_uses_saved_records_and_tracks_future_status_changes():
         assert "recommendation_generated" in types
         assert timeline == sorted(timeline, key=lambda item: (item["happened_at"], item["id"]))
         test_event = next(item for item in timeline if item["event_type"] == "diagnostic_test")
-        assert test.json()["observed_result"] in test_event["description"]
+        assert test_event["description"] == test.json()["test_name"]
+        assert test_event["details"]["result"] == "Inconclusive"
+        assert test_event["details"]["observation"] == test.json()["observed_result"]
+        assert test_event["details"]["notes"] == test.json()["details"]
 
 
 def test_similar_memory_is_explainable_and_not_a_current_diagnosis():

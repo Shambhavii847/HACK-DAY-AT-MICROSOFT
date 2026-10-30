@@ -45,15 +45,17 @@ def build_timeline(case: RepairCase, events: list[RepairEvent] | None = None) ->
         },
     ]
     for test in case.tests:
-        details = f"Result: {test.result.replace('_', ' ')}. Observation: {test.observed_result}"
-        if test.details:
-            details += f" Notes: {test.details}"
         items.append({
             "id": f"test-{test.id}",
             "event_type": "diagnostic_test",
-            "title": f"Diagnostic test · {test.test_name}",
-            "description": details,
+            "title": "Diagnostic test recorded",
+            "description": test.test_name,
             "happened_at": test.performed_at.isoformat(),
+            "details": {
+                "result": test.result.replace("_", " ").title(),
+                "observation": test.observed_result,
+                **({"notes": test.details} if test.details else {}),
+            },
         })
     for recommendation in case.recommendations:
         try:
@@ -65,9 +67,16 @@ def build_timeline(case: RepairCase, events: list[RepairEvent] | None = None) ->
         items.append({
             "id": f"recommendation-{recommendation.id}",
             "event_type": "recommendation_generated",
-            "title": "Recommendation generated",
-            "description": f"Source: {recommendation.provider} · Evidence test IDs: {', '.join(map(str, evidence_ids)) or 'none'}. {summary}",
+            "title": "AI recommendation generated",
+            "description": summary,
             "happened_at": recommendation.created_at.isoformat(),
+            "details": {
+                "source": recommendation.provider,
+                "evidence considered": ", ".join(
+                    f"{test.test_name} ({test.result.replace('_', ' ')})"
+                    for test in case.tests if test.id in evidence_ids
+                ) or "No test evidence included",
+            },
         })
     for event in events or []:
         try:
@@ -77,7 +86,10 @@ def build_timeline(case: RepairCase, events: list[RepairEvent] | None = None) ->
         item: dict[str, Any] = {
             "id": f"event-{event.id}",
             "event_type": event.event_type,
-            "title": event.description,
+            "title": {
+                "status_changed": "Repair status updated",
+                "outcome_recorded": "Repair outcome updated",
+            }.get(event.event_type, event.description),
             "description": event.description,
             "happened_at": event.occurred_at.isoformat(),
         }
