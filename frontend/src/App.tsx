@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Dispatch, FormEvent, SetStateAction } from 'react'
 import {
   Activity, AlertCircle, AlertTriangle, ArrowRight,
-  BookOpen, Check, CheckCircle2, ChevronDown, ChevronRight, CircleHelp, Clock3,
+  Check, CheckCircle2, ChevronDown, ChevronRight, CircleHelp, Clock3,
   Cpu, ExternalLink, Eye, Filter, Github, History, House, Info, Layers3, Linkedin,
   LoaderCircle, Mail, Phone, Plus, RefreshCw, RotateCcw, Search,
   Settings, ShieldCheck, Smartphone, Sparkles, Stethoscope, Trash2,
@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { api } from './lib/api'
 import type {
-  CaseDetail, CaseStatus, DashboardSummary, Health, KnowledgeSource,
+  CaseDetail, CaseStatus, DashboardSummary, Health,
   NextCheck, Priority, Recommendation, RepairCase, TestStatus,
 } from './lib/types'
 
@@ -21,7 +21,6 @@ const navItems = [
   { id: 'cases', label: 'Repair Queue', icon: Layers3 },
   { id: 'diagnostics', label: 'Diagnostics', icon: Stethoscope },
   { id: 'memory', label: 'Repair Memory', icon: History },
-  { id: 'knowledge', label: 'Knowledge Base', icon: BookOpen },
 ] as const
 
 type NavId = typeof navItems[number]['id']
@@ -1139,8 +1138,6 @@ export default function App() {
   const [cases, setCases] = useState<RepairCase[]>([])
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null)
   const [health, setHealth] = useState<Health | null>(null)
-  const [knowledge, setKnowledge] = useState<KnowledgeSource[]>([])
-  const [knowledgeNotice, setKnowledgeNotice] = useState('')
   const [selectedId, setSelectedId] = useState('')
   const [selectedDetail, setSelectedDetail] = useState<CaseDetail | null>(null)
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null)
@@ -1207,11 +1204,10 @@ export default function App() {
   })
 
   async function loadAll() {
-    const [healthResult, casesResult, dashboardResult, knowledgeResult] = await Promise.allSettled([
+    const [healthResult, casesResult, dashboardResult] = await Promise.allSettled([
       api.health(),
       api.cases(),
       api.dashboard(),
-      api.knowledge(),
     ])
     if (healthResult.status === 'fulfilled') setHealth(healthResult.value)
     if (casesResult.status === 'fulfilled') {
@@ -1223,10 +1219,6 @@ export default function App() {
       )
     }
     if (dashboardResult.status === 'fulfilled') setDashboard(dashboardResult.value)
-    if (knowledgeResult.status === 'fulfilled') {
-      setKnowledge(knowledgeResult.value.sources)
-      setKnowledgeNotice(knowledgeResult.value.notice)
-    }
     if (casesResult.status === 'rejected') {
       setNotice({ kind: 'error', text: errorMessage((casesResult as PromiseRejectedResult).reason) })
     }
@@ -1489,47 +1481,6 @@ export default function App() {
 
   return (
     <div className={`app-shell ${isHome ? 'home-layout' : 'dock-layout'}`}>
-      {/* Sleek minimal top strip - HIDDEN on HomePage */}
-      {!isHome && (
-        <header className="app-top-strip">
-          <div className="app-brand" onClick={() => setActiveNav('home')}>
-            <div className="brand-mark">
-              <Zap size={18} fill="currentColor" strokeWidth={2.4} />
-            </div>
-            <span className="brand-name">fixora<span className="brand-ai">.ai</span></span>
-          </div>
-
-          <div className="top-strip-actions">
-            <div className={`model-chip ${aiActive ? 'model-chip-online' : ''}`}>
-              <span className={`connection-dot ${aiActive ? 'online' : ''}`} />
-              {aiActive ? health?.model_name || 'Gemma 4' : 'Local rules fallback'}
-            </div>
-            <button
-              className="topbar-icon"
-              title="Fixora Lab Settings"
-              onClick={() => {
-                playUiSound('click', settings)
-                setShowSettings(true)
-              }}
-            >
-              <Settings size={15} />
-            </button>
-            <button
-              className="topbar-icon"
-              title="Refresh app data"
-              onClick={() => {
-                playUiSound('click', settings)
-                void refreshLists()
-                  .then(() => flash('success', 'Refreshed.'))
-                  .catch((error) => flash('error', errorMessage(error)))
-              }}
-            >
-              <RefreshCw size={15} />
-            </button>
-          </div>
-        </header>
-      )}
-
       {notice && !isHome && (
         <div className={`notice-bar notice-${notice.kind}`} role="status">
           <span className="notice-mark">
@@ -1635,23 +1586,16 @@ export default function App() {
           </div>
         )}
 
-        {!isHome && activeNav !== 'overview' && activeNav !== 'cases' && activeNav !== 'diagnostics' && (
-          <div className="page-content">
-            <div key={activeNav} className="page-transition-wrap">
-              {activeNav === 'memory' && (
-                <MemoryPage
-                  cases={memoryCases}
-                  query={memoryQuery}
-                  setQuery={setMemoryQuery}
-                  onOpen={openCase}
-                  onDelete={promptDeleteDevice}
-                />
-              )}
-
-              {activeNav === 'knowledge' && (
-                <KnowledgePage sources={knowledge} notice={knowledgeNotice} />
-              )}
-            </div>
+        {!isHome && activeNav === 'memory' && (
+          <div key="memory" className="page-transition-wrap memory-fullscreen-wrap">
+            <MemoryPage
+              cases={memoryCases}
+              query={memoryQuery}
+              setQuery={setMemoryQuery}
+              onOpen={openCase}
+              onDelete={promptDeleteDevice}
+              settings={settings}
+            />
           </div>
         )}
       </main>
@@ -1684,6 +1628,21 @@ export default function App() {
               )
             })}
             <div className="dock-divider" />
+            <button
+              className="dock-item"
+              onClick={() => {
+                playUiSound('click', settings)
+                void refreshLists()
+                  .then(() => flash('success', 'Refreshed.'))
+                  .catch((error) => flash('error', errorMessage(error)))
+              }}
+              aria-label="Refresh app data"
+            >
+              <span className="dock-tooltip">Refresh</span>
+              <div className="dock-icon-wrap">
+                <RefreshCw size={20} strokeWidth={1.8} />
+              </div>
+            </button>
             <button
               className="dock-item"
               onClick={() => {
@@ -3145,120 +3104,316 @@ function NextCheckCard({ check, index }: { check: NextCheck; index: number }) {
   )
 }
 
+const MEMORY_TEST_POINTS = [
+  {
+    id: 'm-tl-1',
+    code: 'TIMELINE-01',
+    label: 'SCREEN RETRIEVAL ARCHIVE',
+    status: 'CASE #1041 · RESTORED',
+    color: '#10b981',
+    left: '57.7%',
+    top: '10.2%',
+    period: '2.2s',
+  },
+  {
+    id: 'm-tl-2',
+    code: 'TIMELINE-02',
+    label: 'LOGIC BOARD DIAGNOSTIC',
+    status: 'CASE #1038 · VERIFIED',
+    color: '#f59e0b',
+    left: '57.7%',
+    top: '21.5%',
+    period: '2.6s',
+  },
+  {
+    id: 'm-tl-3',
+    code: 'TIMELINE-03',
+    label: 'ULTRABOOK BATTERY RECOVERY',
+    status: 'CASE #1029 · COMPLETED',
+    color: '#10b981',
+    left: '57.7%',
+    top: '33.0%',
+    period: '2.0s',
+  },
+  {
+    id: 'm-tl-4',
+    code: 'TIMELINE-04',
+    label: 'RF ANTENNA CALIBRATION',
+    status: 'CASE #1015 · ARCHIVED',
+    color: '#38bdf8',
+    left: '57.7%',
+    top: '44.7%',
+    period: '2.4s',
+  },
+  {
+    id: 'm-tl-5',
+    code: 'TIMELINE-05',
+    label: 'TABLET DIGITIZER FUSION',
+    status: 'CASE #1008 · RESTORED',
+    color: '#10b981',
+    left: '57.7%',
+    top: '56.3%',
+    period: '2.8s',
+  },
+  {
+    id: 'm-bp-1',
+    code: 'HOLO-SCHEMATIC',
+    label: 'EXPLODED CHASSIS BLUEPRINT',
+    status: '60 FPS RECONSTRUCTION',
+    color: '#38bdf8',
+    left: '87.4%',
+    top: '32.5%',
+    period: '3.0s',
+  },
+  {
+    id: 'm-bp-2',
+    code: 'BUS-TELEMETRY',
+    label: 'SMD VOLTAGE MAP BLUEPRINT',
+    status: 'BUS TOPOLOGY NOMINAL',
+    color: '#2dd4bf',
+    left: '84.0%',
+    top: '56.0%',
+    period: '2.5s',
+  },
+  {
+    id: 'm-book',
+    code: 'BENCH-JOURNAL',
+    label: 'ENGINEERING REPAIR LOG',
+    status: 'FIELD SCHEMATICS & BENCH DATA',
+    color: '#a78bfa',
+    left: '77.1%',
+    top: '74.4%',
+    period: '3.2s',
+  },
+]
+
+function MemoryCircuitMapOverlay({ animated }: { animated: boolean }) {
+  return (
+    <svg
+      className="memory-circuit-svg"
+      viewBox="0 0 1024 571"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id="memPulseGrad" x1="0" y1="0.5" x2="1" y2="0.5">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="1" />
+          <stop offset="35%" stopColor="#2dd4bf" stopOpacity="0.95" />
+          <stop offset="100%" stopColor="#0284c7" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id="memRailPulseGrad" x1="0.5" y1="0" x2="0.5" y2="1">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="1" />
+          <stop offset="50%" stopColor="#38bdf8" stopOpacity="0.95" />
+          <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+
+      {/* Desk / wall printed cyan tracks */}
+      <path className="m-circuit-base" d="M 0 24 L 95 24 L 144 42 L 210 42" />
+      <path className="m-circuit-base" d="M 0 380 L 40 380 L 76 356 L 190 356" />
+      <path className="m-circuit-base" d="M 0 545 L 80 545 L 128 530 L 240 530" />
+
+      {/* Vertical Timeline Rail connecting the 5 history cards */}
+      <line className="m-timeline-rail-base" x1="591" y1="40" x2="591" y2="340" />
+
+      {/* Animated flowing pulses */}
+      {animated && (
+        <g className="m-pulses-group">
+          <path className="m-circuit-pulse m-flow-1" d="M 0 24 L 95 24 L 144 42 L 210 42" />
+          <path className="m-circuit-pulse m-flow-2" d="M 0 380 L 40 380 L 76 356 L 190 356" />
+          <path className="m-circuit-pulse m-flow-3" d="M 0 545 L 80 545 L 128 530 L 240 530" />
+          <line className="m-timeline-rail-pulse" x1="591" y1="40" x2="591" y2="340" />
+        </g>
+      )}
+
+      {/* Junction pads at exact photo node positions */}
+      <circle className="m-circuit-node" cx="144" cy="42" r="3.5" />
+      <circle className="m-circuit-node" cx="76" cy="356" r="3.5" />
+      <circle className="m-circuit-node" cx="128" cy="530" r="3.5" />
+    </svg>
+  )
+}
+
+function MemoryHoloOverlay({ animated }: { animated: boolean }) {
+  return (
+    <div className="memory-holo-anchor" aria-hidden="true">
+      {animated && (
+        <>
+          <div className="holo-reticle-bracket tl" />
+          <div className="holo-reticle-bracket tr" />
+          <div className="holo-reticle-bracket bl" />
+          <div className="holo-reticle-bracket br" />
+          <div className="memory-holo-scanbeam" />
+        </>
+      )}
+      <div className="memory-holo-tag">
+        <span className="memory-tag-dot" />
+        <span>NEURAL BLUEPRINT ARCHIVE // SCHEMATIC MEMORY</span>
+      </div>
+    </div>
+  )
+}
+
 function MemoryPage({
   cases,
   query,
   setQuery,
   onOpen,
   onDelete,
+  settings,
 }: {
   cases: RepairCase[]
   query: string
   setQuery: (value: string) => void
   onOpen: (id: string, tab?: NavId) => void
   onDelete: (id: string, brand: string, model: string) => void
+  settings?: AppSettings
 }) {
+  const animated = settings?.animationsEnabled ?? true
+
   return (
-    <>
-      <div className="page-heading">
-        <div>
-          <h1>Repair memory</h1>
-        </div>
-        <div className="memory-count-pill">
-          <History size={15} /> {cases.length} completed cases
-        </div>
+    <div className="memory-fullscreen-layout">
+      {/* Pristine Repair Memory Background Layer */}
+      <div className="memory-bg-layer" />
+
+      {/* Atmospheric daylight wash for contrast */}
+      <div className="memory-ambient-mask" aria-hidden="true" />
+
+      {/* Wall & desk printed cyan tracks and timeline rail */}
+      <MemoryCircuitMapOverlay animated={animated} />
+
+      {/* Holographic blueprint scanbeam & reticle */}
+      <MemoryHoloOverlay animated={animated} />
+
+      {/* Optical laser scanner line */}
+      {animated && <div className="memory-laser-scanner" aria-hidden="true" />}
+
+      {/* Timeline & Workbench interactive telemetry probes */}
+      <div className="memory-probes-layer" aria-hidden="true">
+        {MEMORY_TEST_POINTS.map((tp) => (
+          <div
+            key={tp.id}
+            className="memory-smd-probe"
+            style={{ left: tp.left, top: tp.top }}
+          >
+            <span
+              className={`probe-led ${animated ? 'pulsing' : ''}`}
+              style={{ backgroundColor: tp.color, boxShadow: `0 0 8px ${tp.color}` }}
+            />
+            {animated && (
+              <span
+                className="probe-ping"
+                style={{ borderColor: tp.color, animationDuration: tp.period }}
+              />
+            )}
+            <div className="probe-tooltip">
+              <span className="probe-code">{tp.code}</span>
+              <span className="probe-desc">{tp.label}</span>
+              <span className="probe-val" style={{ color: tp.color }}>{tp.status}</span>
+            </div>
+          </div>
+        ))}
       </div>
 
-      <section className="surface-card memory-table-card">
-        <div className="search-box memory-search">
-          <Search size={15} />
+      {/* Minimalist 3D Floating Glass HUD Container in Negative Space (53% width) */}
+      <div className="memory-negative-hud">
+        <div className="memory-hud-header">
+          <div className="memory-telemetry-chip">
+            <span className="memory-telemetry-dot" />
+            <span>HISTORICAL REPAIR ARCHIVE // NEURAL REPAIR MEMORY</span>
+          </div>
+          <div className="memory-header-row">
+            <div className="memory-title-wrap">
+              <h1 className="memory-title">Repair memory</h1>
+              <span className="memory-count-badge">
+                <History size={14} /> {cases.length} completed cases
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 3D Glass Search & Filter Bar */}
+        <div className="memory-search-card">
+          <Search size={18} className="memory-search-icon" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search completed devices, faults, or outcomes..."
+            placeholder="Search completed devices, confirmed faults, or outcomes..."
+            className="memory-search-input"
           />
           {query && (
-            <button onClick={() => setQuery('')} aria-label="Clear memory search">
-              <X size={14} />
+            <button
+              onClick={() => setQuery('')}
+              aria-label="Clear memory search"
+              className="memory-search-clear"
+            >
+              <X size={15} />
             </button>
           )}
         </div>
 
-        {cases.length ? (
-          <div className="memory-list">
-            {cases.map((item) => (
-              <div className="memory-record" key={item.id} onClick={() => onOpen(item.id, 'diagnostics')}>
-                <div className="memory-record-icon"><History size={16} /></div>
-                <div className="memory-record-main">
-                  <div className="memory-record-title">
-                    <strong>{item.issue_title}</strong>
-                    <span className="memory-record-id">{item.id}</span>
-                  </div>
-                  <span className="memory-device-line">{item.brand} {item.model} · {dateLabel(item.updated_at)}</span>
-                  <span className="memory-fault-line">
-                    <CheckCircle2 size={13} /> Confirmed: {item.confirmed_fault}
-                  </span>
-                  <span className="memory-action-line">{item.repair_action}</span>
-                </div>
-                <div className="memory-record-outcome">
-                  <span>OUTCOME</span>
-                  <p>{item.outcome || 'None'}</p>
-                </div>
-                <div className="row-actions-cell" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    className="row-delete-btn"
-                    title="Delete record"
-                    onClick={() => onDelete(item.id, item.brand, item.model)}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                  <ChevronRight size={16} className="memory-chevron" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            icon={History}
-            title="No completed repair records"
-            description="Devices marked as completed with a confirmed fault appear here."
-          />
-        )}
-      </section>
-    </>
-  )
-}
+        {/* 3D Glass Memory Cards Container */}
+        <div className="memory-cards-container">
+          {cases.length ? (
+            <div className="memory-cards-list">
+              {cases.map((item) => (
+                <div
+                  className="memory-card-3d"
+                  key={item.id}
+                  onClick={() => onOpen(item.id, 'diagnostics')}
+                >
+                  <div className="memory-card-3d-sheen" />
+                  <div className="memory-card-top">
+                    <div className="memory-card-icon-chip">
+                      <History size={18} />
+                    </div>
+                    <div className="memory-card-main">
+                      <div className="memory-card-title-row">
+                        <strong className="memory-card-title">{item.issue_title}</strong>
+                        <span className="memory-card-id">{item.id}</span>
+                      </div>
+                      <div className="memory-device-meta">
+                        <span>{item.brand} {item.model}</span>
+                        <span className="meta-sep">·</span>
+                        <span>{dateLabel(item.updated_at)}</span>
+                      </div>
+                      <div className="memory-fault-pill">
+                        <CheckCircle2 size={14} />
+                        <span>Confirmed: <strong>{item.confirmed_fault}</strong></span>
+                      </div>
+                      <p className="memory-action-desc">{item.repair_action}</p>
+                    </div>
 
-function KnowledgePage({ sources, notice }: { sources: KnowledgeSource[]; notice?: string }) {
-  return (
-    <>
-      <div className="page-heading">
-        <div>
-          <h1>Knowledge base</h1>
-          {notice && <p className="page-subtitle">{notice}</p>}
+                    <div className="memory-card-outcome-pod">
+                      <span className="outcome-pod-label">VERIFIED OUTCOME</span>
+                      <p className="outcome-pod-text">{item.outcome || 'None'}</p>
+                    </div>
+
+                    <div className="memory-card-actions" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        className="row-delete-btn"
+                        title="Delete record"
+                        onClick={() => onDelete(item.id, item.brand, item.model)}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                      <ChevronRight size={18} className="memory-chevron-3d" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="surface-card memory-empty-card">
+              <EmptyState
+                icon={History}
+                title="No completed repair records"
+                description="Devices marked as completed with a confirmed fault appear here."
+              />
+            </div>
+          )}
         </div>
       </div>
-
-      <div className="knowledge-grid">
-        {sources.map((source, index) => (
-          <article className="surface-card knowledge-card" key={source.id}>
-            <div className="knowledge-card-head">
-              <span className={`knowledge-source-icon source-icon-${index % 4}`}>
-                <BookOpen size={16} />
-              </span>
-              <span className="source-id">{source.id}</span>
-            </div>
-            <h3>{source.title}</h3>
-            <p className="knowledge-scope">{source.scope}</p>
-            <div className="knowledge-content">{source.content}</div>
-            {source.source_url && (
-              <a className="knowledge-external-link" href={source.source_url} target="_blank" rel="noreferrer">
-                Source reference <ExternalLink size={12} />
-              </a>
-            )}
-          </article>
-        ))}
-      </div>
-    </>
+    </div>
   )
 }

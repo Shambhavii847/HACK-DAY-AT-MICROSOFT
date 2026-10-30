@@ -1057,7 +1057,7 @@ a { color: inherit; }
 .overview-fullscreen-layout {
   flex: 1;
   width: 100%;
-  min-height: calc(100vh - 58px);
+  min-height: 100vh;
   position: relative;
   overflow: hidden;
   display: flex;
@@ -1736,7 +1736,7 @@ a { color: inherit; }
 .queue-fullscreen-layout {
   flex: 1;
   width: 100%;
-  min-height: calc(100vh - 58px);
+  min-height: 100vh;
   position: relative;
   overflow: hidden;
   display: flex;
@@ -2235,7 +2235,7 @@ a { color: inherit; }
 .diagnostics-fullscreen-layout {
   flex: 1;
   width: 100%;
-  min-height: calc(100vh - 58px);
+  min-height: 100vh;
   position: relative;
   overflow-y: auto;
   overflow-x: hidden;
@@ -3456,37 +3456,634 @@ a { color: inherit; }
 .memory-match small { color: #8d9aa7; font-size: 9px; }
 .memory-match em { color: #398c76; font-style: normal; font-size: 9px; }
 
-/* Memory Page */
-.memory-count-pill { display: inline-flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e4eee9; color: #4b8a76; border-radius: 8px; padding: 8px 12px; font-size: 10px; font-weight: 700; }
-.memory-table-card { overflow: hidden; }
-.memory-search { width: calc(100% - 36px); margin: 14px 18px 12px; }
-.memory-list { border-top: 1px solid #f1f4f7; }
-.memory-record { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: #fff; border: 0; border-bottom: 1px solid #eef2f6; padding: 14px 19px; cursor: pointer; transition: background 0.12s ease; }
-.memory-record:hover { background: #fbfdfc; }
-.memory-record-icon { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; color: #4d9580; background: #eaf8f2; flex: 0 0 auto; }
-.memory-record-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
-.memory-record-title { display: flex; align-items: center; gap: 8px; }
-.memory-record-title > strong { color: #3e4e64; font-size: 11px; }
-.memory-record-id { font-size: 9px; color: #a1acba; margin-left: auto; }
-.memory-device-line { color: #9aa5b3; font-size: 9px; }
-.memory-fault-line { display: flex; align-items: center; gap: 5px; color: #3e8b70; font-size: 10px; font-weight: 600; }
-.memory-action-line { color: #7e8c9d; font-size: 9px; }
-.memory-record-outcome { width: 220px; padding: 0 12px 0 16px; border-left: 1px solid #eef2f5; flex: 0 0 auto; }
-.memory-record-outcome span { color: #a0aaba; font-size: 8px; letter-spacing: .8px; font-weight: 800; display: block; }
-.memory-record-outcome p { margin: 4px 0 0; color: #627284; font-size: 10px; line-height: 1.45; }
-.memory-chevron { color: #b3bdc9; }
+/* ----------------------------------------------------
+   Repair Memory: Fullscreen Layout & 3D Glass HUD (Negative Space ~53%)
+   ---------------------------------------------------- */
+.memory-fullscreen-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin-bottom: -104px; /* flows seamlessly behind the macOS dock */
+}
 
-/* Knowledge Page */
-.knowledge-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
-.knowledge-card { padding: 18px; display: flex; flex-direction: column; }
-.knowledge-card-head { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 10px; }
-.knowledge-source-icon { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; }
-.source-icon-0 { color: #19896b; background: #e5f8ef; }.source-icon-1 { color: #bc8841; background: #fff5e4; }.source-icon-2 { color: #5f75c5; background: #eff2ff; }.source-icon-3 { color: #8a6ac0; background: #f4efff; }
-.source-id { color: #a1acba; font-family: ui-monospace, monospace; font-size: 9px; }
-.knowledge-card h3 { margin: 0 0 4px; font-family: Manrope, sans-serif; font-size: 13px; color: #2e3e52; }
-.knowledge-scope { margin: 0; color: #9ba6b5; font-size: 9px; }
-.knowledge-content { flex: 1; margin-top: 12px; padding: 12px; border: 1px solid #eef1f5; border-radius: 8px; background: #fbfcfe; color: #667688; font-size: 10px; line-height: 1.7; }
-.knowledge-external-link { display: inline-flex; gap: 5px; align-items: center; margin-top: 10px; color: #328873; text-decoration: none; font-size: 10px; font-weight: 700; }
+.memory-fullscreen-layout {
+  flex: 1;
+  width: 100%;
+  min-height: 100vh;
+  position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding: 34px 48px 140px;
+  box-sizing: border-box;
+}
+
+/* Pristine Repair Memory Background Layer */
+.memory-bg-layer {
+  position: absolute;
+  inset: 0;
+  background-color: #f1f4f6;
+  background-image: url('/memory-bg.png');
+  background-position: right center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  z-index: 1;
+  filter: brightness(1.02);
+  image-rendering: auto;
+}
+
+/* Atmospheric negative space soft daylight wash for high contrast */
+.memory-ambient-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: radial-gradient(
+    circle at 22% 45%,
+    rgba(255, 255, 255, 0.45) 0%,
+    rgba(255, 255, 255, 0.16) 55%,
+    transparent 82%
+  );
+  pointer-events: none;
+}
+
+/* SVG Circuit Traces & Vertical Timeline Rail Overlay */
+.memory-circuit-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.m-circuit-base {
+  stroke: rgba(45, 212, 191, 0.35);
+  stroke-width: 1.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.m-circuit-node {
+  fill: #2dd4bf;
+  stroke: #ffffff;
+  stroke-width: 1.2;
+  filter: drop-shadow(0 0 4px rgba(45, 212, 191, 0.85));
+}
+
+.m-timeline-rail-base {
+  stroke: rgba(45, 212, 191, 0.35);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+.m-circuit-pulse {
+  fill: none;
+  stroke: url(#memPulseGrad);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 24 160;
+  filter: drop-shadow(0 0 6px rgba(45, 212, 191, 0.9));
+}
+
+.m-timeline-rail-pulse {
+  stroke: url(#memRailPulseGrad);
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-dasharray: 28 170;
+  filter: drop-shadow(0 0 7px rgba(56, 189, 248, 0.9));
+  animation: memRailFlow 3.8s linear infinite;
+}
+
+.m-flow-1 { animation: mPulseFlow 3.4s linear infinite; }
+.m-flow-2 { animation: mPulseFlow 4.2s linear infinite 0.6s; }
+.m-flow-3 { animation: mPulseFlow 3.8s linear infinite 1.3s; }
+
+@keyframes mPulseFlow {
+  from { stroke-dashoffset: 184; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes memRailFlow {
+  from { stroke-dashoffset: 198; }
+  to { stroke-dashoffset: 0; }
+}
+
+/* Holographic Blueprint Overlay on Upper Right */
+.memory-holo-anchor {
+  position: absolute;
+  right: 12.6%;
+  top: 32.5%;
+  transform: translate(50%, -50%);
+  width: 110px;
+  height: 120px;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.memory-holo-scanbeam {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, #38bdf8 50%, transparent 100%);
+  box-shadow: 0 0 10px #38bdf8, 0 0 20px #0284c7;
+  animation: memHoloScanbeam 3.4s ease-in-out infinite alternate;
+}
+
+@keyframes memHoloScanbeam {
+  0% { top: 4px; opacity: 0.3; }
+  50% { opacity: 0.95; }
+  100% { top: calc(100% - 6px); opacity: 0.3; }
+}
+
+.memory-holo-tag {
+  position: absolute;
+  bottom: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: rgba(12, 23, 38, 0.88);
+  backdrop-filter: blur(8px);
+  color: #7dd3fc;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
+}
+.memory-tag-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 6px #38bdf8;
+}
+
+/* Sweeping Optical Laser Scanner Line */
+.memory-laser-scanner {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(45, 212, 191, 0.15) 20%,
+    rgba(45, 212, 191, 0.9) 50%,
+    rgba(45, 212, 191, 0.15) 80%,
+    transparent 100%
+  );
+  box-shadow: 0 0 12px rgba(45, 212, 191, 0.8), 0 0 24px rgba(45, 212, 191, 0.4);
+  pointer-events: none;
+  z-index: 4;
+  animation: memLaserScan 6.8s ease-in-out infinite;
+}
+
+@keyframes memLaserScan {
+  0% { right: 44%; opacity: 0; }
+  15% { opacity: 0.9; }
+  50% { right: 1%; opacity: 0.95; }
+  85% { opacity: 0.9; }
+  100% { right: 44%; opacity: 0; }
+}
+
+/* SMD Probes Layer on Timeline & Workbench */
+.memory-probes-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.memory-smd-probe {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.memory-smd-probe:hover .probe-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, -8px);
+}
+
+/* Minimalist HUD Container in Negative Space (53% width) */
+.memory-negative-hud {
+  position: relative;
+  z-index: 10;
+  width: 53%;
+  max-width: 53vw;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  animation: hudSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.memory-hud-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.memory-telemetry-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 8px rgba(16, 28, 45, 0.04);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: #274059;
+  width: fit-content;
+}
+
+.memory-telemetry-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 7px #10b981;
+}
+
+.memory-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.memory-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.memory-title {
+  margin: 0;
+  font-family: Manrope, sans-serif;
+  font-size: clamp(26px, 2.4vw, 34px);
+  font-weight: 800;
+  letter-spacing: -1px;
+  color: #152236;
+  line-height: 1.1;
+}
+
+.memory-count-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: rgba(236, 253, 245, 0.9);
+  color: #065f46;
+  border: 1px solid rgba(167, 243, 208, 0.9);
+  backdrop-filter: blur(10px);
+}
+
+/* 3D Glass Search & Filter Bar */
+.memory-search-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 18px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.88) 0%,
+    rgba(248, 250, 252, 0.78) 100%
+  );
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  border-top: 1.5px solid #ffffff;
+  border-left: 1.5px solid #ffffff;
+  border-radius: 14px;
+  box-shadow:
+    0 4px 10px -2px rgba(15, 23, 42, 0.05),
+    0 12px 24px -4px rgba(15, 23, 42, 0.06),
+    inset 0 1px 1px 0 #ffffff;
+  transition: all 0.22s ease;
+}
+
+.memory-search-card:focus-within {
+  border-color: #38bdf8;
+  box-shadow:
+    0 8px 24px -4px rgba(56, 189, 248, 0.22),
+    0 0 0 3px rgba(56, 189, 248, 0.14),
+    inset 0 1px 2px #ffffff;
+}
+
+.memory-search-icon {
+  color: #64748b;
+  flex: 0 0 auto;
+}
+
+.memory-search-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1e293b;
+  padding: 8px 0;
+}
+
+.memory-search-input::placeholder {
+  color: #94a3b8;
+}
+
+.memory-search-clear {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  border: 0;
+  background: rgba(241, 245, 249, 0.8);
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.memory-search-clear:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+/* ----------------------------------------------------
+   3D CARDS CONTAINER & INDIVIDUAL FLOATING 3D CARDS
+   ---------------------------------------------------- */
+.memory-cards-container {
+  perspective: 1200px;
+  transform-style: preserve-3d;
+}
+
+.memory-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Individual 3D Frosted Glass Card */
+.memory-card-3d {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.88) 0%,
+    rgba(248, 250, 252, 0.74) 100%
+  );
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: 16px;
+  padding: 20px 22px;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  border-top: 1.5px solid #ffffff;
+  border-left: 1.5px solid #ffffff;
+  box-shadow:
+    0 4px 6px -1px rgba(15, 23, 42, 0.04),
+    0 10px 20px -3px rgba(15, 23, 42, 0.07),
+    0 20px 32px -4px rgba(15, 23, 42, 0.05),
+    inset 0 1px 1.5px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 2px 0 rgba(15, 23, 42, 0.03);
+  transition:
+    transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.22s ease,
+    background 0.22s ease;
+  overflow: hidden;
+}
+
+/* 3D Specular Sheen line across the top of the card */
+.memory-card-3d-sheen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.9) 25%,
+    rgba(56, 189, 248, 0.6) 50%,
+    rgba(255, 255, 255, 0.9) 75%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+/* Interactive 3D Lift & Tilt on Hover */
+.memory-card-3d:hover {
+  transform: translateY(-5px) scale(1.008) translateZ(12px);
+  box-shadow:
+    0 20px 42px -8px rgba(15, 23, 42, 0.13),
+    0 8px 18px -2px rgba(15, 23, 42, 0.08),
+    0 0 0 1px rgba(56, 189, 248, 0.35),
+    inset 0 1.5px 2px rgba(255, 255, 255, 1);
+  border-color: rgba(56, 189, 248, 0.45);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(248, 252, 255, 0.85) 100%
+  );
+}
+
+.memory-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  width: 100%;
+}
+
+/* 3D Embossed Icon Chip */
+.memory-card-icon-chip {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #0f766e;
+  background: linear-gradient(135deg, #e6fbf3 0%, #d1f4e7 100%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 4px 10px rgba(16, 185, 129, 0.16),
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.9);
+  flex: 0 0 auto;
+}
+
+.memory-card-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.memory-card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.memory-card-title {
+  color: #172437;
+  font-family: Manrope, sans-serif;
+  font-size: 16.5px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  line-height: 1.25;
+}
+
+.memory-card-id {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  color: #0284c7;
+  background: rgba(238, 246, 255, 0.9);
+  border: 1px solid rgba(186, 230, 253, 0.9);
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.memory-device-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.meta-sep {
+  color: #cbd5e1;
+}
+
+.memory-fault-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #0f766e;
+  background: rgba(240, 253, 250, 0.85);
+  border: 1px solid rgba(204, 251, 241, 0.9);
+  padding: 4px 10px;
+  border-radius: 7px;
+  font-size: 13.5px;
+  width: fit-content;
+}
+
+.memory-fault-pill strong {
+  color: #115e59;
+  font-weight: 700;
+}
+
+.memory-action-desc {
+  margin: 2px 0 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+/* Inset 3D Outcome Pod */
+.memory-card-outcome-pod {
+  width: 210px;
+  padding: 10px 14px;
+  border-radius: 11px;
+  background: rgba(241, 245, 249, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: inset 0 2px 4px rgba(15, 23, 42, 0.04);
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.outcome-pod-label {
+  color: #94a3b8;
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  font-weight: 800;
+  display: block;
+}
+
+.outcome-pod-text {
+  margin: 0;
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.memory-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.memory-chevron-3d {
+  color: #94a3b8;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.memory-card-3d:hover .memory-chevron-3d {
+  color: #0284c7;
+  transform: translateX(3px);
+}
+
+.memory-empty-card {
+  padding: 48px 24px;
+}
+
+/* Media Queries for Memory HUD */
+@media (max-width: 1200px) {
+  .memory-negative-hud {
+    width: 62%;
+    max-width: 62vw;
+  }
+}
+
+@media (max-width: 900px) {
+  .memory-fullscreen-layout {
+    padding: 24px 20px 140px;
+  }
+  .memory-negative-hud {
+    width: 100%;
+    max-width: 100%;
+  }
+  .memory-card-top {
+    flex-wrap: wrap;
+  }
+  .memory-card-outcome-pod {
+    width: 100%;
+    margin-top: 6px;
+  }
+}
 
 /* Modals: Translucent Frosted Glass */
 .modal-backdrop { position: fixed; inset: 0; z-index: 1200; padding: 24px 16px; display: flex; align-items: center; justify-content: center; background: rgba(14,25,39,.58); backdrop-filter: blur(8px); overflow-y: auto; }
@@ -3502,8 +4099,27 @@ a { color: inherit; }
 .spin { animation: spin 1.2s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
-/* Notifications */
-.notice-bar { position: sticky; top: 60px; z-index: 19; display: flex; align-items: center; gap: 9px; padding: 10px 36px; font-size: 11px; border-bottom: 1px solid transparent; }
+/* Notifications: Floating Glass Toast */
+.notice-bar {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 22px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  max-width: 540px;
+  animation: hudSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
 .notice-success { background: #edfbf5; color: #26755c; border-color: #d9f2e5; }
 .notice-error { background: #fff3f2; color: #b24b46; border-color: #f7dfdc; }
 .notice-info { background: #eff7ff; color: #416c9e; border-color: #dcebf8; }
@@ -3516,12 +4132,12 @@ a { color: inherit; }
 .empty-state h3 { margin: 0 0 6px; font-family: Manrope, sans-serif; font-size: 13px; color: #36465b; }
 .empty-state p { max-width: 350px; margin: 0; color: #8b97a7; line-height: 1.6; font-size: 10px; }
 
-/* Responsive adjustments */
+/* ====================================================
+   Comprehensive Mobile & Tablet Display Ratio Rules
+   ==================================================== */
 @media (max-width: 1024px) {
   .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .knowledge-grid { grid-template-columns: minmax(0, 1fr); }
   .page-content { padding-left: 20px; padding-right: 20px; }
-  .app-top-strip { padding-left: 20px; padding-right: 20px; }
   .home-hero-page::after {
     background: linear-gradient(
       90deg,
@@ -3532,20 +4148,621 @@ a { color: inherit; }
     );
   }
 }
+
+/* Tablets and Mobile Landscape */
 @media (max-width: 768px) {
-  .credits-team-grid { grid-template-columns: 1fr; }
-  .credit-member-card.lead-card { grid-column: span 1; }
-  .game-hud-container { padding-left: 24px; padding-right: 24px; width: 100%; }
+  html, body {
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  .app-shell {
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100vw;
+  }
+
+  .app-shell.home-layout {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .main-area-home {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-y: visible;
+  }
+
+  /* Home / Hero Page Mobile Ratio */
+  .home-hero-page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    height: auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+    padding: 36px 20px 48px;
+    box-sizing: border-box;
+  }
+
+  .home-bg-layer {
+    background-position: 70% center;
+  }
+
+  .home-hero-page::after {
+    background: linear-gradient(
+      180deg,
+      rgba(244, 247, 250, 0.96) 0%,
+      rgba(244, 247, 250, 0.90) 50%,
+      rgba(244, 247, 250, 0.97) 100%
+    );
+  }
+
+  .game-hud-container {
+    padding-left: 0;
+    padding-right: 0;
+    width: 100%;
+    max-width: 100%;
+    gap: 18px;
+    margin: auto 0;
+  }
+
+  .game-main-title {
+    font-size: clamp(34px, 9vw, 44px);
+    letter-spacing: -1.2px;
+  }
+
+  .game-tagline {
+    font-size: 13px;
+    max-width: 100%;
+    line-height: 1.55;
+  }
+
+  .game-btn {
+    max-width: 100%;
+    padding: 13px 16px;
+    font-size: 11.5px;
+  }
+
+  .game-btn:hover {
+    transform: none; /* Avoid sideways jump on mobile touch tap */
+  }
+
+  .optical-reticle-wrap {
+    display: none !important;
+  }
+
+  /* macOS Glass Dock: Mobile Compact Mode */
+  .mac-dock-container {
+    bottom: 10px;
+    padding: 0 8px;
+    width: 100%;
+    box-sizing: border-box;
+    justify-content: center;
+  }
+
+  .mac-dock.glass-dock {
+    gap: 5px;
+    padding: 6px 10px;
+    border-radius: 22px;
+    max-width: calc(100vw - 16px);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.42);
+    box-sizing: border-box;
+  }
+
+  .dock-item {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    border-radius: 10px;
+  }
+
+  .dock-item-active {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  .dock-icon-wrap svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .dock-tooltip {
+    display: none !important; /* Disable tooltip stickiness on touch devices */
+  }
+
+  .dock-divider {
+    height: 18px;
+    margin: 0 2px;
+  }
+
+  /* Notice Bar Toast */
+  .notice-bar {
+    width: calc(100% - 32px);
+    max-width: calc(100% - 32px);
+    font-size: 11px;
+    padding: 9px 16px;
+    top: 14px;
+  }
+
+  /* Overview Page Mobile */
+  .overview-fullscreen-layout {
+    padding: 24px 16px 120px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background-position: 70% center;
+  }
+
+  .overview-negative-hud {
+    width: 100%;
+    max-width: 100%;
+    gap: 16px;
+  }
+
+  .overview-hud-header h1 {
+    font-size: 26px;
+  }
+
+  .overview-glass-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .overview-glass-card {
+    padding: 14px 14px;
+    border-radius: 12px;
+  }
+
+  .stat-num {
+    font-size: 26px;
+  }
+
+  .stat-label {
+    font-size: 11.5px;
+  }
+
+  .stat-detail {
+    font-size: 9px;
+  }
+
+  .overview-attention-card {
+    padding: 16px 16px;
+  }
+
+  .urgent-case-row {
+    padding: 10px 12px;
+  }
+
+  /* Repair Queue Page Mobile */
+  .queue-fullscreen-layout {
+    padding: 24px 16px 120px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background-position: 70% center;
+  }
+
+  .queue-negative-hud {
+    width: 100%;
+    max-width: 100%;
+    gap: 14px;
+  }
+
+  .queue-header-row {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .queue-title {
+    font-size: 24px;
+  }
+
+  .queue-new-btn {
+    padding: 8px 14px;
+    font-size: 12px;
+  }
+
+  .queue-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .queue-toolbar .search-box {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .filter-controls {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .filter-select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .filter-select select {
+    width: 100%;
+    font-size: 11px;
+  }
+
+  .queue-table-wrap {
+    max-height: none;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+  }
+
+  .data-table.queue-table {
+    min-width: 580px;
+  }
+
+  /* Diagnostics Page Mobile */
+  .diagnostics-fullscreen-layout {
+    padding: 20px 14px 130px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background-position: 75% center;
+  }
+
+  .diagnostics-negative-hud {
+    width: 100%;
+    max-width: 100%;
+    gap: 14px;
+  }
+
+  .diagnostics-title {
+    font-size: 24px;
+  }
+
+  .diagnostics-header-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .diagnostics-device-chip {
+    font-size: 11px;
+    padding: 4px 10px;
+  }
+
+  .diagnostics-subnav {
+    width: 100%;
+    display: flex;
+    gap: 5px;
+    box-sizing: border-box;
+    padding: 4px;
+  }
+
+  .diagnostics-tab-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 8px 8px;
+    font-size: 11.5px;
+    text-align: center;
+  }
+
+  .diagnostic-select-bar {
+    padding: 10px 14px;
+    gap: 10px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .case-picker select {
+    font-size: 12.5px;
+    padding: 9px 30px 9px 10px;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .span-two {
+    grid-column: span 1 !important;
+  }
+
+  .outcome-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .outcome-status-label {
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .outcome-actions button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .ai-clean-copilot .ai-panel-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .button-compact {
+    width: 100%;
+    justify-content: center;
+    margin-left: 0;
+  }
+
+  .case-overview-top {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .case-overview-id h2 {
+    font-size: 19px;
+  }
+
+  .case-overview-foot {
+    font-size: 11.5px;
+    gap: 12px;
+  }
+
+  .recommendation-summary {
+    margin: 0 14px 14px;
+    font-size: 13px;
+  }
+
+  .hypothesis-item {
+    margin: 0 12px 8px;
+  }
+
+  .hypothesis-detail {
+    padding: 0 12px 12px 12px;
+    font-size: 12.5px;
+  }
+
+  .next-check-item {
+    margin: 0 12px 8px;
+  }
+
+  .next-check-body {
+    padding: 0 12px 12px 12px;
+    font-size: 12.5px;
+  }
+
+  .missing-info-box {
+    margin: 10px 12px 14px;
+  }
+
+  .source-reference-section {
+    margin: 0 12px 14px;
+  }
+
+  /* Repair Memory Page Mobile */
+  .memory-fullscreen-layout {
+    padding: 20px 14px 130px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background-position: 70% center;
+  }
+
+  .memory-negative-hud {
+    width: 100%;
+    max-width: 100%;
+    gap: 14px;
+  }
+
+  .memory-header-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .memory-title {
+    font-size: 24px;
+  }
+
+  .memory-search-card {
+    padding: 6px 14px;
+  }
+
+  .memory-search-input {
+    font-size: 13px;
+  }
+
+  .memory-card-3d {
+    padding: 14px 14px;
+    transform: none !important;
+  }
+
+  .memory-card-3d:hover {
+    transform: none !important;
+  }
+
+  .memory-card-top {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .memory-card-outcome-pod {
+    width: 100%;
+    margin-top: 4px;
+    box-sizing: border-box;
+  }
+
+  .memory-card-actions {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 8px;
+    border-top: 1px solid rgba(226, 232, 240, 0.7);
+  }
+
+  /* Clean up desktop-only overlays and probes that obstruct cards on mobile */
+  .overview-fan-anchor,
+  .overview-laser-scanner,
+  .overview-probes-layer,
+  .queue-camera-anchor,
+  .queue-laser-scanner,
+  .queue-probes-layer,
+  .diagnostics-holo-anchor,
+  .diagnostics-waveform-anchor,
+  .diagnostics-laser-scanner,
+  .diagnostics-probes-layer,
+  .memory-holo-anchor,
+  .memory-laser-scanner,
+  .memory-probes-layer,
+  .probe-tooltip {
+    display: none !important;
+  }
+
+  .overview-circuit-svg,
+  .queue-circuit-svg,
+  .diagnostics-circuit-svg,
+  .memory-circuit-svg {
+    opacity: 0.35;
+  }
+
+  /* Modals Mobile Bottom Sheet */
+  .modal-backdrop {
+    padding: 12px 8px;
+    align-items: flex-end;
+  }
+
+  .modal-card {
+    width: 100%;
+    max-height: 88vh;
+    border-radius: 18px 18px 0 0;
+    margin: 0;
+  }
+
+  .modal-head {
+    padding: 14px 18px;
+  }
+
+  .modal-form {
+    padding: 14px 18px;
+  }
+
+  .modal-actions {
+    padding: 12px 18px;
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+
+  .modal-actions button {
+    width: 100%;
+    justify-content: center;
+    min-height: 40px;
+  }
+
+  /* Credits Modal */
+  .credits-team-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .credit-member-card.lead-card {
+    grid-column: span 1;
+  }
+
+  .credits-modal-body {
+    padding: 16px 16px 20px;
+  }
+
+  /* Settings Modal */
+  .settings-modal-card {
+    width: 100%;
+    max-height: 88vh;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .settings-modal-head {
+    padding: 14px 18px;
+  }
+
+  .settings-modal-body {
+    padding: 14px 16px 20px;
+  }
+
+  .settings-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .settings-select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .settings-action-row {
+    width: 100%;
+  }
+
+  .settings-modal-actions {
+    padding: 12px 18px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  /* Standby Screen */
+  .standby-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .standby-actions .game-btn {
+    max-width: none;
+  }
 }
-@media (max-width: 640px) {
-  .stats-grid { grid-template-columns: 1fr; }
-  .form-grid.two-cols { grid-template-columns: 1fr; }
-  .span-two { grid-column: span 1; }
-  .mac-dock.glass-dock { gap: 6px; padding: 8px 12px; }
-  .dock-item { width: 40px; height: 40px; }
-  .memory-record-outcome { display: none; }
-  .standby-actions { flex-direction: column; align-items: stretch; }
-  .standby-actions .game-btn { max-width: none; }
+
+/* Narrow Smartphones (iPhone SE, mini, width <= 400px) */
+@media (max-width: 400px) {
+  .overview-glass-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mac-dock.glass-dock {
+    gap: 2px;
+    padding: 5px 6px;
+    border-radius: 18px;
+  }
+
+  .dock-item {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    border-radius: 8px;
+  }
+
+  .dock-icon-wrap svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .dock-active-dot {
+    width: 3px;
+    height: 3px;
+    bottom: 2px;
+  }
+
+  .dock-badge {
+    font-size: 8px;
+    padding: 1px 4px;
+    top: -2px;
+    right: -2px;
+  }
+
+  .game-main-title {
+    font-size: 30px;
+  }
 }
 
 /* ----------------------------------------------------
@@ -3876,7 +5093,10 @@ body.no-animations .camera-reticle-crosshair,
 body.no-animations .d-pulses-group,
 body.no-animations .diagnostics-laser-scanner,
 body.no-animations .holo-scanbeam,
-body.no-animations .waveform-signal-pulse {
+body.no-animations .waveform-signal-pulse,
+body.no-animations .m-pulses-group,
+body.no-animations .memory-laser-scanner,
+body.no-animations .memory-holo-scanbeam {
   display: none !important;
 }
 body.no-animations .overview-fan-rotor {
