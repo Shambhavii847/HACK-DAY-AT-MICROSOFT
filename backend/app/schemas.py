@@ -35,6 +35,208 @@ class TestResultRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+ComponentTestStatus = Literal["pass", "fail", "inconclusive", "not_tested"]
+ComponentHealthStatus = Literal["working", "faulty", "needs_testing", "unknown"]
+ComponentCondition = Literal["new", "like_new", "good", "fair", "damaged", "unknown"]
+ReuseStatus = Literal["under_review", "available", "not_eligible"]
+ResaleStatus = Literal["under_review", "approved_for_resale", "not_eligible"]
+
+
+class ComponentRecordCreate(BaseModel):
+    component_name: str = Field(min_length=1, max_length=160)
+    model_part_number: str | None = Field(default=None, max_length=160)
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("component_name")
+    @classmethod
+    def strip_component_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Component name cannot be empty")
+        return value
+
+    @field_validator("model_part_number")
+    @classmethod
+    def strip_part_number(cls, value: str | None) -> str | None:
+        value = value.strip() if value else None
+        return value or None
+
+
+class ComponentTestCreate(BaseModel):
+    test_name: str = Field(min_length=2, max_length=180)
+    result: ComponentTestStatus
+    observed_result: str = Field(min_length=1, max_length=1500)
+    details: str = Field(default="", max_length=1500)
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("test_name", "observed_result")
+    @classmethod
+    def strip_component_test_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("This field cannot be empty")
+        return value
+
+
+class ComponentTestRead(BaseModel):
+    id: int
+    component_id: int
+    test_name: str
+    result: ComponentTestStatus
+    observed_result: str
+    details: str
+    performed_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ComponentRecordRead(BaseModel):
+    id: int
+    case_id: str
+    component_name: str
+    model_part_number: str | None = None
+    health_status: ComponentHealthStatus
+    tests: list[ComponentTestRead] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
+class ComponentInventoryCreate(BaseModel):
+    quantity_available: int = Field(ge=1, le=100000)
+    condition: ComponentCondition = "unknown"
+    condition_notes: str = Field(min_length=3, max_length=1500)
+    storage_location: str | None = Field(default=None, max_length=180)
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("condition_notes")
+    @classmethod
+    def strip_condition_notes(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 3:
+            raise ValueError("Record the observed physical condition")
+        return value
+
+    @field_validator("storage_location")
+    @classmethod
+    def strip_location(cls, value: str | None) -> str | None:
+        value = value.strip() if value else None
+        return value or None
+
+
+class ComponentInventoryUpdate(BaseModel):
+    condition: ComponentCondition | None = None
+    condition_notes: str | None = Field(default=None, min_length=3, max_length=1500)
+    storage_location: str | None = Field(default=None, max_length=180)
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("condition_notes")
+    @classmethod
+    def strip_updated_condition_notes(cls, value: str | None) -> str | None:
+        value = value.strip() if value is not None else None
+        if value is not None and len(value) < 3:
+            raise ValueError("Record the observed physical condition")
+        return value
+
+    @field_validator("storage_location")
+    @classmethod
+    def strip_updated_location(cls, value: str | None) -> str | None:
+        value = value.strip() if value else None
+        return value or None
+
+
+class InventoryQuantityChange(BaseModel):
+    quantity: int = Field(ge=1, le=100000)
+    reason: str = Field(min_length=3, max_length=500)
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("reason")
+    @classmethod
+    def strip_reason(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 3:
+            raise ValueError("A reason is required")
+        return value
+
+
+class InventoryStockAdjustment(BaseModel):
+    quantity_delta: int = Field(ge=-100000, le=100000)
+    reason: str = Field(min_length=3, max_length=500)
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("reason")
+    @classmethod
+    def strip_adjustment_reason(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 3:
+            raise ValueError("A reason is required")
+        return value
+
+    @field_validator("quantity_delta")
+    @classmethod
+    def nonzero_adjustment(cls, value: int) -> int:
+        if value == 0:
+            raise ValueError("Quantity change must not be zero")
+        return value
+
+
+class InventoryReviewCreate(BaseModel):
+    status: ReuseStatus | ResaleStatus
+    reason: str = Field(min_length=10, max_length=1500)
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("reason")
+    @classmethod
+    def strip_review_reason(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 10:
+            raise ValueError("Add a specific review reason (at least 10 characters)")
+        return value
+
+
+class ComponentInventoryEventRead(BaseModel):
+    id: int
+    event_type: str
+    quantity: int
+    reason: str
+    occurred_at: datetime
+
+
+class InventoryComponentCandidateRead(BaseModel):
+    id: int
+    case_id: str
+    component_name: str
+    model_part_number: str | None = None
+    health_status: ComponentHealthStatus
+    latest_test: ComponentTestRead | None = None
+    source_device: str
+
+
+class ComponentInventoryRead(BaseModel):
+    id: int
+    component_id: int
+    case_id: str
+    component_name: str
+    model_part_number: str | None = None
+    source_device: str
+    health_status: ComponentHealthStatus
+    latest_test: ComponentTestRead | None = None
+    quantity_available: int
+    quantity_reserved: int
+    quantity_used: int
+    condition: ComponentCondition
+    condition_notes: str
+    condition_assessed_at: datetime
+    storage_location: str | None = None
+    reuse_status: ReuseStatus
+    reuse_reason: str
+    reuse_reviewed_at: datetime | None = None
+    resale_status: ResaleStatus
+    resale_reason: str
+    resale_reviewed_at: datetime | None = None
+    events: list[ComponentInventoryEventRead] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
 class RepairCaseCreate(BaseModel):
     device_category: str = Field(default="Smartphone", min_length=2, max_length=40)
     brand: str = Field(min_length=1, max_length=80)

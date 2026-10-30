@@ -1,5 +1,5 @@
 from collections.abc import Generator
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
 from .config import settings
 
@@ -21,18 +21,14 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-def create_schema() -> None:
+def create_schema(bind=engine) -> None:
+    """Apply additive, idempotent schema upgrades and preserve existing rows."""
     # Import models here so SQLAlchemy registers every table before create_all.
     from . import models  # noqa: F401
-    Base.metadata.create_all(bind=engine)
-    # Ensure customer_contact column exists on SQLite tables created previously
-    try:
-        with engine.connect() as conn:
-            from sqlalchemy import text
-            res = conn.execute(text("PRAGMA table_info(repair_cases)")).fetchall()
-            col_names = [row[1] for row in res]
-            if "customer_contact" not in col_names and "id" in col_names:
+    Base.metadata.create_all(bind=bind)
+    # Keep the existing SQLite upgrade for databases created before customer_contact.
+    if bind.dialect.name == "sqlite" and "repair_cases" in inspect(bind).get_table_names():
+        columns = {column["name"] for column in inspect(bind).get_columns("repair_cases")}
+        if "customer_contact" not in columns:
+            with bind.begin() as conn:
                 conn.execute(text("ALTER TABLE repair_cases ADD COLUMN customer_contact VARCHAR(120)"))
-                conn.commit()
-    except Exception:
-        pass

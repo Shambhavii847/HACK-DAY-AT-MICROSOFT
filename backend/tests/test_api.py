@@ -1,10 +1,11 @@
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.database import Base, get_db
+from app.database import Base, create_schema, get_db
+from app.models import RepairCase, Recommendation, RepairEvent, TestResult as DiagnosticTestResult
 from app.config import settings
 from app.main import app
 
@@ -167,6 +168,276 @@ def test_create_case_add_test_and_recommendation():
         assert other_recommendation.status_code == 200, other_recommendation.text
         assert other_recommendation.json()["content"]["evidence_test_ids"] == [other_test.json()["id"]]
         assert test.json()["id"] not in other_recommendation.json()["content"]["evidence_test_ids"]
+
+
+def test_component_health_is_derived_from_component_test_evidence():
+    with TestClient(app) as client:
+        created = client.post("/api/cases", json={
+            "device_category": "Laptop", "brand": "EvidenceBrand", "model": "Model C",
+            "issue_title": "Display issue", "symptoms": "The display intermittently goes blank.",
+        })
+        assert created.status_code == 201
+        case_id = created.json()["id"]
+
+        component = client.post(f"/api/cases/{case_id}/components", json={
+            "component_name": "Display cable", "model_part_number": "DC-100",
+        })
+        assert component.status_code == 201, component.text
+        record = component.json()
+        assert record["health_status"] == "unknown"
+        assert record["tests"] == []
+        assert record["case_id"] == case_id
+
+        # Clients cannot assign health directly, including an unsupported claim of Working.
+        rejected_override = client.post(f"/api/cases/{case_id}/components", json={
+            "component_name": "Second cable", "health_status": "working",
+        })
+        assert rejected_override.status_code == 422
+
+        evidence = {
+            "test_name": "Continuity check",
+            "result": "pass",
+            "observed_result": "Continuity measured within the manufacturer's specified range.",
+            "details": "Meter and test conditions recorded by technician.",
+        }
+        tested = client.post(f"/api/cases/{case_id}/components/{record['id']}/tests", json=evidence)
+        assert tested.status_code == 200, tested.text
+        assert tested.json()["health_status"] == "working"
+        assert tested.json()["tests"][0]["observed_result"] == evidence["observed_result"]
+        assert tested.json()["tests"][0]["details"] == evidence["details"]
+
+        evidence["result"] = "inconclusive"
+        evidence["observed_result"] = "Reading fluctuated; no conclusion can be drawn."
+        needs_testing = client.post(f"/api/cases/{case_id}/components/{record['id']}/tests", json=evidence)
+        assert needs_testing.status_code == 200
+        assert needs_testing.json()["health_status"] == "needs_testing"
+
+        evidence["result"] = "fail"
+        evidence["observed_result"] = "No continuity under the recorded test conditions."
+        faulty = client.post(f"/api/cases/{case_id}/components/{record['id']}/tests", json=evidence)
+        assert faulty.status_code == 200
+        assert faulty.json()["health_status"] == "faulty"
+        assert len(faulty.json()["tests"]) == 3
+
+        detail = client.get(f"/api/cases/{case_id}")
+        assert detail.status_code == 200
+        assert detail.json()["components"][0]["health_status"] == "faulty"
+        assert len(detail.json()["components"][0]["tests"]) == 3
+        listed = client.get(f"/api/cases/{case_id}/components")
+        assert listed.status_code == 200
+        assert listed.json()[0]["id"] == record["id"]
+
+
+def test_component_tests_cannot_be_attached_to_another_repair():
+    with TestClient(app) as client:
+        case_ids = []
+        for brand in ("ComponentOne", "ComponentTwo"):
+            response = client.post("/api/cases", json={
+                "device_category": "Laptop", "brand": brand, "model": "M1",
+                "issue_title": "Port check", "symptoms": "Port requires inspection.",
+            })
+            assert response.status_code == 201
+            case_ids.append(response.json()["id"])
+        component = client.post(f"/api/cases/{case_ids[0]}/components", json={"component_name": "USB port"})
+        assert component.status_code == 201
+        response = client.post(f"/api/cases/{case_ids[1]}/components/{component.json()['id']}/tests", json={
+            "test_name": "Visual inspection", "result": "pass", "observed_result": "No visible damage found.",
+        })
+        assert response.status_code == 404
+
+
+def test_component_tables_are_added_without_losing_existing_repair_rows():
+    upgrade_engine = create_engine("sqlite://")
+    legacy_tables = [RepairCase.__table__, DiagnosticTestResult.__table__, Recommendation.__table__, RepairEvent.__table__]
+    Base.metadata.create_all(bind=upgrade_engine, tables=legacy_tables)
+    OldSession = sessionmaker(bind=upgrade_engine)
+    with OldSession() as db:
+        db.add(RepairCase(
+            id="FX-OLD", device_category="Laptop", brand="Existing", model="Saved device",
+            issue_title="Existing repair", symptoms="Preserve these old case details.",
+        ))
+        db.commit()
+
+    create_schema(bind=upgrade_engine)
+
+    tables = set(inspect(upgrade_engine).get_table_names())
+    assert "component_records" in tables
+    assert "component_test_results" in tables
+    assert "component_inventory" in tables
+    assert "component_inventory_events" in tables
+    with upgrade_engine.connect() as conn:
+        preserved = conn.execute(text("SELECT id, symptoms FROM repair_cases WHERE id = 'FX-OLD'")).one()
+    assert preserved == ("FX-OLD", "Preserve these old case details.")
+    upgrade_engine.dispose()
+
+
+def create_inventory_test_component(client, brand="InventoryBrand"):
+    case = client.post("/api/cases", json={
+        "device_category": "Laptop", "brand": brand, "model": "Inventory Model",
+        "issue_title": "Component inventory test", "symptoms": "Component needs evaluation.",
+    })
+    assert case.status_code == 201, case.text
+    component = client.post(f"/api/cases/{case.json()['id']}/components", json={
+        "component_name": "Power module", "model_part_number": "PM-100",
+    })
+    assert component.status_code == 201, component.text
+    return case.json(), component.json()
+
+
+def test_inventory_validation_and_negative_quantity_protection():
+    with TestClient(app) as client:
+        case, component = create_inventory_test_component(client)
+        invalid = client.post(f"/api/components/{component['id']}/inventory", json={
+            "quantity_available": 0, "condition": "good", "condition_notes": "Visual check complete.",
+        })
+        assert invalid.status_code == 422
+
+        created = client.post(f"/api/components/{component['id']}/inventory", json={
+            "quantity_available": 2, "condition": "good", "condition_notes": "No visible damage observed.",
+            "storage_location": "Bin A3",
+        })
+        assert created.status_code == 201, created.text
+        record = created.json()
+        assert record["case_id"] == case["id"]
+        assert record["source_device"] == "InventoryBrand Inventory Model"
+        assert record["quantity_available"] == 2
+        assert record["health_status"] == "unknown"
+        assert record["reuse_status"] == "under_review"
+        assert record["resale_status"] == "under_review"
+
+        bad_reuse = client.post(f"/api/inventory/{record['id']}/reuse-review", json={
+            "status": "available", "reason": "Reviewed for future repair use.",
+        })
+        assert bad_reuse.status_code == 409
+        bad_resale = client.post(f"/api/inventory/{record['id']}/resale-review", json={
+            "status": "approved_for_resale", "reason": "Reviewed for internal resale consideration.",
+        })
+        assert bad_resale.status_code == 409
+
+        negative = client.post(f"/api/inventory/{record['id']}/stock-adjustments", json={
+            "quantity_delta": -3, "reason": "Count correction.",
+        })
+        assert negative.status_code == 409
+        unchanged = client.get("/api/inventory").json()
+        assert unchanged[0]["quantity_available"] == 2
+        assert client.post(f"/api/inventory/{record['id']}/stock-adjustments", json={
+            "quantity_delta": 0, "reason": "No quantity change.",
+        }).status_code == 422
+
+
+def test_reuse_requires_passing_test_and_tracks_reserved_used_and_released_stock():
+    with TestClient(app) as client:
+        case, component = create_inventory_test_component(client)
+        evidence = client.post(f"/api/cases/{case['id']}/components/{component['id']}/tests", json={
+            "test_name": "Power module output test", "result": "pass",
+            "observed_result": "Output measured within the documented expected range.",
+            "details": "Recorded at the specified test points.",
+        })
+        assert evidence.status_code == 200
+        created = client.post(f"/api/components/{component['id']}/inventory", json={
+            "quantity_available": 4, "condition": "good", "condition_notes": "No cracks or heat discoloration observed.",
+        })
+        assert created.status_code == 201
+        inventory_id = created.json()["id"]
+
+        approved = client.post(f"/api/inventory/{inventory_id}/reuse-review", json={
+            "status": "available", "reason": "Passing output test and good physical condition reviewed.",
+        })
+        assert approved.status_code == 200, approved.text
+        assert approved.json()["reuse_status"] == "available"
+
+        reserved = client.post(f"/api/inventory/{inventory_id}/reservations", json={
+            "quantity": 2, "reason": "Reserved for repair FX-TEST.",
+        })
+        assert reserved.status_code == 200, reserved.text
+        assert (reserved.json()["quantity_available"], reserved.json()["quantity_reserved"], reserved.json()["quantity_used"]) == (2, 2, 0)
+
+        used = client.post(f"/api/inventory/{inventory_id}/reservations/use", json={
+            "quantity": 1, "reason": "Installed in the recorded repair.",
+        })
+        assert used.status_code == 200
+        assert (used.json()["quantity_available"], used.json()["quantity_reserved"], used.json()["quantity_used"]) == (2, 1, 1)
+
+        released = client.post(f"/api/inventory/{inventory_id}/reservations/release", json={
+            "quantity": 1, "reason": "Repair plan changed; returned to stock.",
+        })
+        assert released.status_code == 200
+        assert (released.json()["quantity_available"], released.json()["quantity_reserved"], released.json()["quantity_used"]) == (3, 0, 1)
+        assert [event["event_type"] for event in released.json()["events"]] == ["reserved", "used", "released"]
+
+        over_reserve = client.post(f"/api/inventory/{inventory_id}/reservations", json={
+            "quantity": 4, "reason": "Requested count exceeds remaining stock.",
+        })
+        assert over_reserve.status_code == 409
+        persisted = client.get("/api/inventory").json()[0]
+        assert persisted["quantity_available"] == 3
+        assert persisted["quantity_used"] == 1
+
+
+def test_resale_requires_explicit_review_and_fresh_test_and_condition_evidence():
+    with TestClient(app) as client:
+        case, component = create_inventory_test_component(client)
+        created = client.post(f"/api/components/{component['id']}/inventory", json={
+            "quantity_available": 1, "condition": "damaged", "condition_notes": "Cracked casing observed.",
+        })
+        assert created.status_code == 201
+        inventory_id = created.json()["id"]
+
+        untested_approval = client.post(f"/api/inventory/{inventory_id}/resale-review", json={
+            "status": "approved_for_resale", "reason": "Requested approval before testing.",
+        })
+        assert untested_approval.status_code == 409
+        assert client.post(f"/api/inventory/{inventory_id}/resale-review", json={
+            "status": "not_eligible", "reason": "Damage is recorded; not suitable for resale.",
+        }).status_code == 200
+
+        passed = client.post(f"/api/cases/{case['id']}/components/{component['id']}/tests", json={
+            "test_name": "Functional output test", "result": "pass",
+            "observed_result": "Output measured within the documented range.",
+        })
+        assert passed.status_code == 200
+        still_damaged = client.post(f"/api/inventory/{inventory_id}/resale-review", json={
+            "status": "approved_for_resale", "reason": "Passing test but recorded damage remains.",
+        })
+        assert still_damaged.status_code == 409
+
+        updated = client.patch(f"/api/inventory/{inventory_id}", json={
+            "condition": "good", "condition_notes": "Inspected; no visible damage found.",
+            "storage_location": "Shelf B2",
+        })
+        assert updated.status_code == 200
+        assert updated.json()["resale_status"] == "under_review"
+        assert updated.json()["reuse_status"] == "under_review"
+
+        approved = client.post(f"/api/inventory/{inventory_id}/resale-review", json={
+            "status": "approved_for_resale", "reason": "Passing test and updated physical condition reviewed.",
+        })
+        assert approved.status_code == 200, approved.text
+        assert approved.json()["resale_status"] == "approved_for_resale"
+        assert approved.json()["resale_reviewed_at"]
+
+        inconclusive = client.post(f"/api/cases/{case['id']}/components/{component['id']}/tests", json={
+            "test_name": "Follow-up test", "result": "inconclusive",
+            "observed_result": "Follow-up reading did not support a conclusion.",
+        })
+        assert inconclusive.status_code == 200
+        refreshed = client.get("/api/inventory").json()[0]
+        assert refreshed["health_status"] == "needs_testing"
+        assert refreshed["resale_status"] == "under_review"
+        assert refreshed["reuse_status"] == "under_review"
+        assert client.get("/api/inventory?resale_status=under_review").json()
+
+
+def test_demo_components_cannot_enter_real_inventory():
+    with TestClient(app) as client:
+        demo_case = next(item for item in client.get("/api/cases").json() if item["data_origin"] == "demo")
+        detail = client.get(f"/api/cases/{demo_case['id']}").json()
+        component_response = client.post(f"/api/cases/{demo_case['id']}/components", json={"component_name": "Sample part"})
+        assert component_response.status_code == 201
+        blocked = client.post(f"/api/components/{component_response.json()['id']}/inventory", json={
+            "quantity_available": 1, "condition": "good", "condition_notes": "Visual check complete.",
+        })
+        assert blocked.status_code == 409
 
 
 def test_safety_case_gets_stop_and_escalate_guidance():

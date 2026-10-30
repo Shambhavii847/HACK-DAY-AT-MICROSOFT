@@ -1,6 +1,72 @@
 export type CaseStatus = 'new' | 'diagnosing' | 'waiting_parts' | 'in_repair' | 'testing' | 'completed' | 'on_hold'
 export type Priority = 'low' | 'normal' | 'high' | 'urgent'
 export type TestStatus = 'pass' | 'fail' | 'inconclusive' | 'not_tested' | 'not_applicable'
+export type ComponentHealthStatus = 'working' | 'faulty' | 'needs_testing' | 'unknown'
+export type ComponentTestStatus = 'pass' | 'fail' | 'inconclusive' | 'not_tested'
+export type ComponentCondition = 'new' | 'like_new' | 'good' | 'fair' | 'damaged' | 'unknown'
+export type ReuseStatus = 'under_review' | 'available' | 'not_eligible'
+export type ResaleStatus = 'under_review' | 'approved_for_resale' | 'not_eligible'
+
+export interface ComponentTestEvidence {
+  id: number
+  component_id: number
+  test_name: string
+  result: ComponentTestStatus
+  observed_result: string
+  details: string
+  performed_at: string
+}
+
+export interface ComponentRecord {
+  id: number
+  case_id: string
+  component_name: string
+  model_part_number: string | null
+  health_status: ComponentHealthStatus
+  tests: ComponentTestEvidence[]
+  created_at: string
+  updated_at: string
+}
+
+export interface InventoryComponentCandidate extends Omit<ComponentRecord, 'tests' | 'created_at' | 'updated_at'> {
+  latest_test: ComponentTestEvidence | null
+  source_device: string
+}
+
+export interface ComponentInventoryEvent {
+  id: number
+  event_type: string
+  quantity: number
+  reason: string
+  occurred_at: string
+}
+
+export interface ComponentInventoryRecord {
+  id: number
+  component_id: number
+  case_id: string
+  component_name: string
+  model_part_number: string | null
+  source_device: string
+  health_status: ComponentHealthStatus
+  latest_test: ComponentTestEvidence | null
+  quantity_available: number
+  quantity_reserved: number
+  quantity_used: number
+  condition: ComponentCondition
+  condition_notes: string
+  condition_assessed_at: string
+  storage_location: string | null
+  reuse_status: ReuseStatus
+  reuse_reason: string
+  reuse_reviewed_at: string | null
+  resale_status: ResaleStatus
+  resale_reason: string
+  resale_reviewed_at: string | null
+  events: ComponentInventoryEvent[]
+  created_at: string
+  updated_at: string
+}
 
 export interface RepairCase {
   id: string
@@ -129,6 +195,7 @@ export interface Recommendation {
 
 export interface CaseDetail extends RepairCase {
   tests: TestResult[]
+  components: ComponentRecord[]
   latest_recommendation: Recommendation | null
   timeline: TimelineEvent[]
   safety_alerts: SafetyAlert[]

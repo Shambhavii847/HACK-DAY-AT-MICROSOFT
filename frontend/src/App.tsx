@@ -11,8 +11,9 @@ import {
 } from 'lucide-react'
 import { api } from './lib/api'
 import type {
-  CaseDetail, CaseStatus, DashboardSummary, Health, KnowledgeSource,
-  NextCheck, Priority, Recommendation, RepairCase, SafetyAlert, SimilarRepair, TestResult, TestStatus, TimelineEvent,
+  CaseDetail, CaseStatus, ComponentRecord, ComponentTestStatus, DashboardSummary, Health, KnowledgeSource,
+  ComponentCondition, ComponentInventoryRecord, InventoryComponentCandidate, NextCheck, Priority, Recommendation,
+  RepairCase, ResaleStatus, ReuseStatus, SafetyAlert, SimilarRepair, TestResult, TestStatus, TimelineEvent,
 } from './lib/types'
 
 const navItems = [
@@ -21,6 +22,7 @@ const navItems = [
   { id: 'cases', label: 'Repair Queue', icon: Layers3 },
   { id: 'diagnostics', label: 'Diagnostics', icon: Stethoscope },
   { id: 'memory', label: 'Repair Memory', icon: History },
+  { id: 'inventory', label: 'Parts Inventory', icon: PackageSearch },
   { id: 'knowledge', label: 'Knowledge Base', icon: BookOpen },
 ] as const
 
@@ -295,7 +297,7 @@ function CreditsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
         <div className="modal-head credits-modal-head">
           <div>
             <span className="eyebrow">HACK DAY AT MICROSOFT</span>
-            <h2>Project Credits</h2>
+              <h2>Project team</h2>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="Close">
             <X size={18} />
@@ -354,7 +356,7 @@ function CreditsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
               className="source-code-button"
             >
               <Github size={17} />
-              <span>Source Code · GitHub Repository</span>
+              <span>View source code on GitHub</span>
               <ExternalLink size={14} />
             </a>
           </div>
@@ -392,12 +394,12 @@ function StandbyModal({
       <div className="standby-card">
         <div className="standby-status-row">
           <span className="standby-blinker" />
-          <span>SESSION SUSPENDED // WORKSPACE STANDBY</span>
+          <span>SESSION PAUSED // WORKSPACE ON STANDBY</span>
         </div>
-        <h2>Fixora Hardware OS Disengaged</h2>
+        <h2>Fixora session paused</h2>
         <p>
-          Diagnostic matrix placed in safe standby mode. All repair logs and test data are stored safely.
-          You can close this tab using <kbd>Cmd+W</kbd> / <kbd>Ctrl+W</kbd> or click Close Tab below:
+          The workspace is paused. Repair records and test results remain saved.
+          Close this tab with <kbd>Cmd+W</kbd> / <kbd>Ctrl+W</kbd>, or select Close tab below:
         </p>
         <div className="standby-actions">
           <button
@@ -408,7 +410,7 @@ function StandbyModal({
             }}
           >
             <span className="game-btn-num">&gt;&gt;</span>
-            <span className="game-btn-label">Resume Session</span>
+            <span className="game-btn-label">Resume session</span>
             <span className="game-btn-bracket">]</span>
           </button>
           <button
@@ -416,7 +418,7 @@ function StandbyModal({
             onClick={handleForceClose}
           >
             <span className="game-btn-num">XX</span>
-            <span className="game-btn-label">Close Tab</span>
+            <span className="game-btn-label">Close tab</span>
             <span className="game-btn-bracket">]</span>
           </button>
         </div>
@@ -482,7 +484,7 @@ function LightDiagnosticAwakening({
 
         <div className="reticle-telemetry-tag">
           <Zap size={11} fill="currentColor" />
-          <span>OPTICAL CALIBRATION // 100% FOCUS</span>
+          <span>OPTICAL ALIGNMENT // REFERENCE VIEW</span>
         </div>
       </div>
     </div>
@@ -591,7 +593,7 @@ function SettingsModal({
         <div className="modal-head settings-modal-head">
           <div className="settings-head-title">
             <span className="eyebrow">SYSTEM CONFIGURATION</span>
-            <h2>Fixora Lab Settings</h2>
+            <h2>Settings</h2>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="Close settings">
             <X size={18} />
@@ -603,13 +605,13 @@ function SettingsModal({
           <div className="settings-section">
             <div className="settings-section-head">
               <Sparkles size={16} />
-              <h3>Visual FX & Animations</h3>
+              <h3>Visual effects and motion</h3>
             </div>
 
             <div className="settings-row">
               <div className="settings-text">
-                <span className="settings-label">Enable Animations & Circuit FX</span>
-                <span className="settings-desc">Master toggle for background neon circuit traces, laser scanline, radar ripples, and button micro-interactions.</span>
+                <span className="settings-label">Animations and circuit effects</span>
+                <span className="settings-desc">Show animated circuit traces, scan lines, ripples, and button interactions.</span>
               </div>
               <label className="switch-label">
                 <input
@@ -624,8 +626,8 @@ function SettingsModal({
 
             <div className="settings-row">
               <div className="settings-text">
-                <span className="settings-label">Live Telemetry Oscilloscope</span>
-                <span className="settings-desc">Display animated hardware frequency waveform & system telemetry in the HUD.</span>
+                <span className="settings-label">Hardware telemetry display</span>
+                <span className="settings-desc">Show the animated waveform and system telemetry in the interface.</span>
               </div>
               <label className="switch-label">
                 <input
@@ -640,8 +642,8 @@ function SettingsModal({
 
             <div className="settings-row">
               <div className="settings-text">
-                <span className="settings-label">High-Contrast Glass HUD</span>
-                <span className="settings-desc">Enhances contrast and panel outlines for bright workshop lighting.</span>
+                <span className="settings-label">High-contrast display</span>
+                <span className="settings-desc">Increase panel contrast for bright workshop environments.</span>
               </div>
               <label className="switch-label">
                 <input
@@ -663,7 +665,7 @@ function SettingsModal({
                   onReplayBoot()
                 }}
               >
-                <RotateCcw size={13} /> Replay Optical Calibration Sequence
+                <RotateCcw size={13} /> Replay startup sequence
               </button>
             </div>
           </div>
@@ -672,13 +674,13 @@ function SettingsModal({
           <div className="settings-section">
             <div className="settings-section-head">
               <Cpu size={16} />
-              <h3>AI & Reasoning Engine</h3>
+              <h3>Diagnostic engine</h3>
             </div>
 
             <div className="settings-row">
               <div className="settings-text">
-                <span className="settings-label">Diagnostics Inference Model</span>
-                <span className="settings-desc">Choose between live Gemma 4 reasoning API or offline heuristic rules.</span>
+                <span className="settings-label">Recommendation source</span>
+                <span className="settings-desc">Choose the Gemma API or local rule-based guidance.</span>
               </div>
               <select
                 className="settings-select"
@@ -688,15 +690,15 @@ function SettingsModal({
                   onUpdateSettings((prev) => ({ ...prev, modelEngine: e.target.value as 'gemma-4' | 'fallback-rules' }))
                 }}
               >
-                <option value="gemma-4">Gemma 4 (26B Reasoning Matrix)</option>
-                <option value="fallback-rules">Rule-based Local Engine</option>
+                <option value="gemma-4">Gemma 4 API</option>
+                <option value="fallback-rules">Local rules</option>
               </select>
             </div>
 
             <div className="settings-row">
               <div className="settings-text">
-                <span className="settings-label">Automatic AI Triage on Intake</span>
-                <span className="settings-desc">Instantly evaluate fault probability and generate test matrix when a device is registered.</span>
+                <span className="settings-label">Automatic triage on case creation</span>
+                <span className="settings-desc">Prepare an initial assessment and suggested checks when a repair case is created.</span>
               </div>
               <label className="switch-label">
                 <input
@@ -711,8 +713,8 @@ function SettingsModal({
 
             <div className="settings-row">
               <div className="settings-text">
-                <span className="settings-label">Strict Safety Quarantine</span>
-                <span className="settings-desc">Enforce mandatory pause on thermal runaway or punctured battery hazards.</span>
+                <span className="settings-label">Strict safety mode</span>
+                <span className="settings-desc">This preference is saved for future safety controls; it does not currently change safety checks.</span>
               </div>
               <label className="switch-label">
                 <input
@@ -730,13 +732,13 @@ function SettingsModal({
           <div className="settings-section">
             <div className="settings-section-head">
               <ShieldCheck size={16} />
-              <h3>Queue Safety & Handover</h3>
+              <h3>Repair queue and handover</h3>
             </div>
 
             <div className="settings-row">
               <div className="settings-text">
-                <span className="settings-label">Confirm Device Deletion</span>
-                <span className="settings-desc">Require confirmation prompt before permanently deleting any repair record.</span>
+                <span className="settings-label">Confirm repair case deletion</span>
+                <span className="settings-desc">Ask for confirmation before permanently deleting a repair case.</span>
               </div>
               <label className="switch-label">
                 <input
@@ -751,8 +753,8 @@ function SettingsModal({
 
             <div className="settings-row">
               <div className="settings-text">
-                <span className="settings-label">Confirm Repair Completion</span>
-                <span className="settings-desc">Require confirmation before setting a device as completed and archiving to memory.</span>
+                <span className="settings-label">Confirm repair completion</span>
+                <span className="settings-desc">Ask for confirmation before completing a case and moving it to Repair Memory.</span>
               </div>
               <label className="switch-label">
                 <input
@@ -767,8 +769,8 @@ function SettingsModal({
 
             <div className="settings-row">
               <div className="settings-text">
-                <span className="settings-label">Auto-Archive Completed Repairs</span>
-                <span className="settings-desc">Keep the repair queue focused by filtering completed devices into Repair Memory.</span>
+                <span className="settings-label">Archive completed repairs automatically</span>
+                <span className="settings-desc">Move completed cases from the active queue to Repair Memory.</span>
               </div>
               <label className="switch-label">
                 <input
@@ -786,13 +788,13 @@ function SettingsModal({
           <div className="settings-section">
             <div className="settings-section-head">
               {settings.audioEffects ? <Volume2 size={16} /> : <VolumeX size={16} />}
-              <h3>Hardware Audio Feedback</h3>
+              <h3>Audio feedback</h3>
             </div>
 
             <div className="settings-row">
               <div className="settings-text">
-                <span className="settings-label">Synthesizer Audio Feedback</span>
-                <span className="settings-desc">Play clean browser-synthesized audio clicks on button presses and toggles.</span>
+                <span className="settings-label">Interface sounds</span>
+                <span className="settings-desc">Play subtle sounds when you use buttons and controls.</span>
               </div>
               <label className="switch-label">
                 <input
@@ -857,7 +859,7 @@ function NewRepairModal({
     event.preventDefault()
     setLocalError('')
     if (form.symptoms.trim().length < 5) {
-      setLocalError('Add more detail about the reported symptoms.')
+      setLocalError('Enter at least five characters describing the reported symptoms.')
       return
     }
     await onCreate(form)
@@ -868,7 +870,7 @@ function NewRepairModal({
       <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="new-repair-title">
         <div className="modal-head">
           <div>
-            <h2 id="new-repair-title">Register device</h2>
+            <h2 id="new-repair-title">Create repair case</h2>
           </div>
           <button className="icon-button" type="button" onClick={onClose} aria-label="Close">
             <X size={18} />
@@ -903,7 +905,7 @@ function NewRepairModal({
               <input required minLength={4} maxLength={160} value={form.issue_title} onChange={(e) => setField('issue_title', e.target.value)} placeholder="e.g. Charging disconnects intermittently" />
             </label>
             <label className="span-two">Reported symptoms
-              <textarea required minLength={5} rows={3} value={form.symptoms} onChange={(e) => setField('symptoms', e.target.value)} placeholder="What was observed?" />
+              <textarea required minLength={5} rows={3} value={form.symptoms} onChange={(e) => setField('symptoms', e.target.value)} placeholder="Describe the reported symptoms" />
             </label>
             <label className="span-two">Customer contact <span className="label-muted">(phone or email)</span>
               <input value={form.customer_contact} onChange={(e) => setField('customer_contact', e.target.value)} placeholder="+1 (555) 000-0000 or customer@example.com" />
@@ -913,7 +915,7 @@ function NewRepairModal({
           <div className="modal-actions">
             <button type="button" className="button button-ghost" onClick={onClose}>Cancel</button>
             <button type="submit" className="button button-primary" disabled={busy}>
-              {busy ? <LoaderCircle className="spin" size={16} /> : <Plus size={16} />} Register device
+              {busy ? <LoaderCircle className="spin" size={16} /> : <Plus size={16} />} Create repair case
             </button>
           </div>
         </form>
@@ -979,7 +981,7 @@ function HomePage({
         <div className="game-hud-top">
           <div className="game-hud-badge">
             <span className="hud-blinker" />
-            <span>SYS.STATUS // ONLINE</span>
+            <span>SYSTEM STATUS // READY</span>
           </div>
           {settings.hardwareTelemetry && (
             <div className="game-hud-telemetry">
@@ -990,7 +992,7 @@ function HomePage({
                 <span className="telemetry-bar bar-4" />
                 <span className="telemetry-bar bar-5" />
               </div>
-              <span>GEMMA 4 // REASONING MATRIX</span>
+              <span>DIAGNOSTIC ENGINE // READY</span>
             </div>
           )}
         </div>
@@ -1004,7 +1006,7 @@ function HomePage({
             FIXORA<span className="game-title-dot">.AI</span>
           </h1>
           <p className="game-tagline">
-            Grounded diagnostic co-pilot for electronics repair & fault verification.
+            Evidence-based diagnostic support for electronics repair and fault verification.
           </p>
         </div>
 
@@ -1019,7 +1021,7 @@ function HomePage({
             }}
           >
             <span className="game-btn-num">01</span>
-            <span className="game-btn-label">New Repair</span>
+            <span className="game-btn-label">Create repair case</span>
             <span className="game-btn-bracket">]</span>
           </button>
 
@@ -1081,14 +1083,14 @@ function HomePage({
             onClick={onQuit}
           >
             <span className="game-btn-num">06</span>
-            <span className="game-btn-label">Quit Site</span>
+            <span className="game-btn-label">Close site</span>
             <span className="game-btn-bracket">]</span>
           </button>
         </nav>
 
         <div className="game-hud-bottom">
-          <span className="hud-code-hint">
-            HACK DAY AT MICROSOFT // GEMMA 4 REPAIR COPILOT
+            <span className="hud-code-hint">
+            HACK DAY AT MICROSOFT // REPAIR DIAGNOSTICS
           </span>
         </div>
       </div>
@@ -1157,6 +1159,10 @@ export default function App() {
   const [generating, setGenerating] = useState(false)
   const [recordingTest, setRecordingTest] = useState(false)
   const recordingTestRef = useRef(false)
+  const [recordingComponent, setRecordingComponent] = useState(false)
+  const recordingComponentRef = useRef(false)
+  const [recordingComponentTest, setRecordingComponentTest] = useState<number | null>(null)
+  const recordingComponentTestRef = useRef<number | null>(null)
   const [recordingOutcome, setRecordingOutcome] = useState(false)
   const [notice, setNotice] = useState<Notice>(null)
 
@@ -1275,6 +1281,54 @@ export default function App() {
     setNotice({ kind, text })
   }
 
+  async function createComponent(data: { component_name: string; model_part_number?: string }) {
+    if (!selectedDetail || recordingComponentRef.current) return false
+    const caseId = selectedDetail.id
+    recordingComponentRef.current = true
+    setRecordingComponent(true)
+    try {
+      const component = await api.createComponent(caseId, data)
+      if (selectedIdRef.current === caseId) {
+        setSelectedDetail((current) => current?.id === caseId
+          ? { ...current, components: [...current.components, component] }
+          : current)
+      }
+      flash('success', `${component.component_name} added. Health remains Unknown until test evidence is recorded.`)
+      return true
+    } catch (error) {
+      flash('error', errorMessage(error))
+      return false
+    } finally {
+      recordingComponentRef.current = false
+      setRecordingComponent(false)
+    }
+  }
+
+  async function recordComponentTest(componentId: number, data: {
+    test_name: string; result: ComponentTestStatus; observed_result: string; details: string
+  }) {
+    if (!selectedDetail || recordingComponentTestRef.current !== null) return false
+    const caseId = selectedDetail.id
+    recordingComponentTestRef.current = componentId
+    setRecordingComponentTest(componentId)
+    try {
+      const updatedComponent = await api.addComponentTest(caseId, componentId, data)
+      if (selectedIdRef.current === caseId) {
+        setSelectedDetail((current) => current?.id === caseId
+          ? { ...current, components: current.components.map((component) => component.id === componentId ? updatedComponent : component) }
+          : current)
+      }
+      flash('success', `Test evidence saved for ${updatedComponent.component_name}.`)
+      return true
+    } catch (error) {
+      flash('error', errorMessage(error))
+      return false
+    } finally {
+      recordingComponentTestRef.current = null
+      setRecordingComponentTest(null)
+    }
+  }
+
   async function createRepair(form: Record<string, string>) {
     setBusy(true)
     try {
@@ -1293,7 +1347,7 @@ export default function App() {
       setActiveNav('diagnostics')
       setDiagnosticsTab('evidence')
       await refreshLists()
-      flash('success', `${created.brand} ${created.model} (${created.id}) registered.`)
+      flash('success', `Repair case ${created.id} created for ${created.brand} ${created.model}.`)
 
       // Automatic AI Triage if enabled in Settings
       if (settings.autoTriageOnCreate) {
@@ -1303,8 +1357,8 @@ export default function App() {
             if (selectedIdRef.current === created.id) setRecommendation(rec)
             void loadDetail(created.id)
             flash('success', rec.provider === 'gemini_api'
-              ? 'Automatic Gemma recommendation generated.'
-              : 'Automatic guidance generated using local rules.')
+              ? 'Gemma recommendation generated.'
+              : 'Recommendation generated using local rules.')
           })
           .catch((err) => console.warn('Auto triage error:', err))
           .finally(() => setGenerating(false))
@@ -1321,7 +1375,7 @@ export default function App() {
     try {
       await api.deleteCase(caseId)
       setDeleteModal({ isOpen: false, caseId: '', name: '' })
-      flash('success', `Device ${caseId} deleted.`)
+      flash('success', `Repair case ${caseId} deleted.`)
       await refreshLists()
       if (selectedId === caseId) {
         const remaining = cases.filter((c) => c.id !== caseId)
@@ -1367,7 +1421,7 @@ export default function App() {
       setTestForm((current) => ({ ...current, observed_result: '', details: '' }))
       await refreshLists()
       if (selectedIdRef.current === caseId) await loadDetail(caseId)
-      flash('success', 'Test result recorded.')
+      flash('success', 'Diagnostic test result saved.')
     } catch (error) {
       flash('error', errorMessage(error))
     } finally {
@@ -1388,7 +1442,7 @@ export default function App() {
         await loadDetail(caseId)
         setRecommendation((current) => current?.id === result.id ? { ...current, similar_cases: result.similar_cases } : current)
       }
-      flash('success', result.provider === 'gemini_api' ? 'Gemma recommendation generated.' : 'Guidance generated using local rules.')
+      flash('success', result.provider === 'gemini_api' ? 'Gemma recommendation generated.' : 'Recommendation generated using local rules.')
     } catch (error) {
       flash('error', errorMessage(error))
     } finally {
@@ -1403,7 +1457,7 @@ export default function App() {
       await api.outcome(selectedDetail.id, outcomeForm)
       await refreshLists()
       await loadDetail(selectedDetail.id)
-      flash('success', outcomeForm.status === 'completed' ? 'Case marked completed and moved to Repair Memory.' : 'Repair outcome saved.')
+      flash('success', outcomeForm.status === 'completed' ? 'Repair case completed and moved to Repair Memory.' : 'Repair outcome saved.')
     } catch (error) {
       flash('error', errorMessage(error))
     } finally {
@@ -1431,7 +1485,7 @@ export default function App() {
       await api.updateCase(caseId, { status })
       await refreshLists()
       if (selectedId === caseId) await loadDetail(caseId)
-      flash('success', `Case ${caseId} moved to ${statusNames[status]}.`)
+      flash('success', `Repair case ${caseId} moved to ${statusNames[status]}.`)
     } catch (error) {
       flash('error', errorMessage(error))
     }
@@ -1523,7 +1577,7 @@ export default function App() {
             </div>
             <button
               className="topbar-icon"
-              title="Fixora Lab Settings"
+              title="Open settings"
               onClick={() => {
                 playUiSound('click', settings)
                 setShowSettings(true)
@@ -1533,11 +1587,11 @@ export default function App() {
             </button>
             <button
               className="topbar-icon"
-              title="Refresh app data"
+              title="Refresh repair data"
               onClick={() => {
                 playUiSound('click', settings)
                 void refreshLists()
-                  .then(() => flash('success', 'Refreshed.'))
+                  .then(() => flash('success', 'Repair data refreshed.'))
                   .catch((error) => flash('error', errorMessage(error)))
               }}
             >
@@ -1637,6 +1691,8 @@ export default function App() {
               stale={staleRecommendation}
               generating={generating}
               recordingTest={recordingTest}
+              recordingComponent={recordingComponent}
+              recordingComponentTest={recordingComponentTest}
               recordingOutcome={recordingOutcome}
               testForm={testForm}
               setTestForm={setTestForm}
@@ -1644,6 +1700,8 @@ export default function App() {
               setOutcomeForm={setOutcomeForm}
               onSelect={(id) => setSelectedId(id)}
               onAddTest={addTest}
+              onAddComponent={createComponent}
+              onAddComponentTest={recordComponentTest}
               onGenerate={generateRecommendation}
               onSaveOutcome={handleSaveOutcome}
               onDelete={promptDeleteDevice}
@@ -1669,6 +1727,8 @@ export default function App() {
               {activeNav === 'knowledge' && (
                 <KnowledgePage sources={knowledge} notice={knowledgeNotice} />
               )}
+
+              {activeNav === 'inventory' && <InventoryPage />}
             </div>
           </div>
         )}
@@ -1721,9 +1781,9 @@ export default function App() {
                 playUiSound('click', settings)
                 setShowNewRepair(true)
               }}
-              aria-label="New repair"
+              aria-label="Create repair case"
             >
-              <span className="dock-tooltip">New repair</span>
+              <span className="dock-tooltip">Create repair case</span>
               <div className="dock-icon-wrap">
                 <Plus size={22} strokeWidth={2.5} />
               </div>
@@ -1766,8 +1826,8 @@ export default function App() {
 
       <ConfirmModal
         isOpen={deleteModal.isOpen}
-        title="Delete device?"
-        message={`Are you sure you want to delete ${deleteModal.name} (${deleteModal.caseId})? This action cannot be undone.`}
+        title="Delete repair case?"
+        message={`Delete ${deleteModal.name} (${deleteModal.caseId})? This action cannot be undone.`}
         confirmText="Delete"
         confirmTone="danger"
         busy={busy}
@@ -1777,9 +1837,9 @@ export default function App() {
 
       <ConfirmModal
         isOpen={completeModal.isOpen}
-        title="Mark device as completed?"
-        message={`Marking ${completeModal.caseId} as completed will archive the device into Repair Memory and remove it from the active repair queue.`}
-        confirmText="Mark completed"
+        title="Complete repair case?"
+        message={`Complete ${completeModal.caseId} and move it to Repair Memory? It will be removed from the active queue.`}
+        confirmText="Complete repair case"
         confirmTone="primary"
         busy={recordingOutcome}
         onConfirm={async () => {
@@ -1884,8 +1944,8 @@ function OverviewPage({
             <span className={`overview-telemetry-dot ${aiActive ? 'online' : ''}`} />
             <span>{aiActive ? 'REPAIR INTELLIGENCE ONLINE' : 'REPAIR INTELLIGENCE'}</span>
           </div>
-          <h1>Overview</h1>
-          <p className="overview-subtitle">A clear view of the repairs, evidence, and decisions in your workshop.</p>
+          <h1>Repair overview</h1>
+          <p className="overview-subtitle">Monitor repair cases, diagnostic evidence, and follow-up priorities.</p>
         </header>
 
         <div className="overview-glass-stats-grid">
@@ -1916,7 +1976,7 @@ function OverviewPage({
             </button>
           ))}
         </div>
-        <p className="overview-data-note">Workload totals and insights use user-entered repairs. Demo samples remain available and marked in the repair queue.</p>
+        <p className="overview-data-note">Metrics and insights use user-entered repair records. Demo records are identified in the repair queue.</p>
 
         <section className="overview-glass-attention">
           <div className="glass-attention-head">
@@ -1933,10 +1993,10 @@ function OverviewPage({
                   <span className="signal-item-description">{item.symptoms}</span>
                 </div>
                 <div className="signal-item-state"><StatusPill status={item.status} /><PriorityPill priority={item.priority} /></div>
-                <button className="overview-action-button" onClick={() => { playUiSound('click', settings); onOpen(item.id, 'diagnostics') }}>View diagnosis <ArrowRight size={14} /></button>
+                <button className="overview-action-button" onClick={() => { playUiSound('click', settings); onOpen(item.id, 'diagnostics') }}>Open diagnostics <ArrowRight size={14} /></button>
               </article>
             ))}
-          </div> : <div className="glass-calm-state"><div className="calm-icon-wrap"><CheckCircle2 size={17} /></div><div className="calm-text-wrap"><strong>No high or urgent cases in the queue</strong><small>Priority insights will appear here when cases need attention.</small></div></div>}
+          </div> : <div className="glass-calm-state"><div className="calm-icon-wrap"><CheckCircle2 size={17} /></div><div className="calm-text-wrap"><strong>No high- or urgent-priority repairs need attention</strong><small>Cases needing priority review will appear here.</small></div></div>}
           <div className="overview-pending-actions">
             <div className="overview-pending-heading"><h3>Pending actions</h3><span>{pendingActions.length}</span></div>
             {pendingActions.length ? pendingActions.map((action) => (
@@ -1945,14 +2005,14 @@ function OverviewPage({
                 <span><strong>{action.title} · {action.case_id}</strong><small>{action.detail}</small></span>
                 <ChevronRight size={15} />
               </button>
-            )) : <p className="overview-empty-copy">No pending follow-up actions are recorded for user-entered repairs.</p>}
+            )) : <p className="overview-empty-copy">There are no follow-up actions for user-entered repair cases.</p>}
           </div>
         </section>
 
         <div className="overview-support-grid">
           <section className="overview-support-card">
-            <div className="overview-support-heading"><span className="support-icon insight-icon"><BrainCircuit size={17} /></span><div><h2>AI Repair Insights</h2><p>Record based patterns and queue signals for technician review.</p></div></div>
-            {userCases.length === 0 ? <p className="overview-empty-copy">User-entered repair records will surface recurring issues, bottlenecks, and priorities here.</p> : <div className="overview-insight-list">
+            <div className="overview-support-heading"><span className="support-icon insight-icon"><BrainCircuit size={17} /></span><div><h2>AI Repair Insights</h2><p>Patterns and queue signals from saved repair records.</p></div></div>
+            {userCases.length === 0 ? <p className="overview-empty-copy">Insights will appear when user-entered repair records are available.</p> : <div className="overview-insight-list">
               {recurringIssues.length > 0 && <div className="overview-insight"><span className="insight-mark">↻</span><div><strong>Recurring issue · {recurringIssues[0][0].issue_title}</strong><p>Appears in {recurringIssues[0].length} available cases. Review their test evidence for shared patterns.</p></div></div>}
               {bottlenecks.slice(0, 1).map((item) => <div className="overview-insight" key={`b-${item.id}`}><span className="insight-mark bottleneck-mark"><Clock3 size={15} /></span><div><strong>Waiting case · {item.id}</strong><p>{item.status === 'waiting_parts' ? 'Waiting for parts' : item.status === 'on_hold' ? 'On hold' : 'No update for at least 3 days'} · last updated {dateLabel(item.updated_at)}.</p></div></div>)}
               {suggested.length > 0 && <div className="overview-insight"><span className="insight-mark priority-mark"><Zap size={15} /></span><div><strong>Suggested priority · {suggested[0].id}</strong><p>{priorityNames[suggested[0].priority]} priority, {Math.max(0, Math.floor((Date.now() - new Date(suggested[0].updated_at).getTime()) / 86400000))} days since update. Review urgency and case evidence.</p></div></div>}
@@ -1960,7 +2020,7 @@ function OverviewPage({
             </div>}
           </section>
           <section className="overview-support-card">
-            <div className="overview-support-heading"><span className="support-icon activity-icon"><Activity size={17} /></span><div><h2>Recent Activity</h2><p>Latest changes from user-entered repair cases.</p></div></div>
+            <div className="overview-support-heading"><span className="support-icon activity-icon"><Activity size={17} /></span><div><h2>Recent Activity</h2><p>Recent updates from user-entered repair cases.</p></div></div>
             {recentActivity.length ? <div className="overview-activity-list">{recentActivity.map((item) => {
               const created = Math.abs(new Date(item.updated_at).getTime() - new Date(item.created_at).getTime()) < 1000
               return <button key={item.id} className="overview-activity-row" onClick={() => onOpen(item.id, 'diagnostics')}><span className="activity-dot" /><span className="activity-copy"><strong>{created ? 'Repair case created' : 'Repair case updated'} · {item.id}</strong><small>{item.brand} {item.model} · {statusNames[item.status]}</small></span><time>{dateTimeLabel(item.updated_at)}</time></button>
@@ -1977,7 +2037,7 @@ const OVERVIEW_TEST_POINTS = [
     id: 'tp-soc',
     code: 'TP-102',
     label: 'SOC / CONTROLLER',
-    status: '3.3V BUS NOMINAL',
+    status: 'REFERENCE POINT',
     color: '#42d9ad',
     right: '34.7%',
     top: '52.8%',
@@ -1987,7 +2047,7 @@ const OVERVIEW_TEST_POINTS = [
     id: 'tp-vrm',
     code: 'TP-208',
     label: 'VRM / MOSFET RAIL',
-    status: '1.15V STABLE',
+    status: 'REFERENCE POINT',
     color: '#f59e0b',
     right: '17.6%',
     top: '60.4%',
@@ -1997,7 +2057,7 @@ const OVERVIEW_TEST_POINTS = [
     id: 'tp-dram',
     code: 'TP-314',
     label: 'LPDDR5 BUS CLOCK',
-    status: '100MHz LOCKED',
+    status: 'REFERENCE POINT',
     color: '#38bdf8',
     right: '23.8%',
     top: '34.0%',
@@ -2007,7 +2067,7 @@ const OVERVIEW_TEST_POINTS = [
     id: 'tp-pd',
     code: 'TP-409',
     label: 'TYPE-C POWER DELIVERY',
-    status: '20V / 3.25A SINK',
+    status: 'REFERENCE POINT',
     color: '#10b981',
     right: '11.9%',
     top: '76.4%',
@@ -2017,7 +2077,7 @@ const OVERVIEW_TEST_POINTS = [
     id: 'tp-gnd',
     code: 'TP-001',
     label: 'CHASSIS GROUND PAD',
-    status: '0.00V REFERENCE',
+    status: 'REFERENCE POINT',
     color: '#6ee7b7',
     right: '87.2%',
     top: '89.2%',
@@ -2096,7 +2156,7 @@ function OverviewFanOverlay({ animated }: { animated: boolean }) {
       <div className="overview-fan-telemetry">
         <span className="fan-telemetry-pill">
           <span className="fan-telemetry-dot" />
-          FAN: 3,420 RPM · 38°C
+          FAN ASSEMBLY REFERENCE
         </span>
       </div>
     </div>
@@ -2108,7 +2168,7 @@ const QUEUE_TEST_POINTS = [
     id: 'q-cam',
     code: 'CAM-01',
     label: 'IMAGE SENSOR / DUAL OIS',
-    status: 'OPTICAL FOCUS 100%',
+    status: 'REFERENCE VIEW',
     color: '#38bdf8',
     right: '15.0%',
     top: '57.3%',
@@ -2118,7 +2178,7 @@ const QUEUE_TEST_POINTS = [
     id: 'q-pmic',
     code: 'PMIC-1',
     label: 'POWER MANAGEMENT IC',
-    status: 'VBAT: 3.82V CHARGING',
+    status: 'REFERENCE VIEW',
     color: '#42d9ad',
     right: '9.6%',
     top: '52.1%',
@@ -2128,7 +2188,7 @@ const QUEUE_TEST_POINTS = [
     id: 'q-ap',
     code: 'SOC-A16',
     label: 'APPLICATION PROCESSOR',
-    status: 'LOGIC RAIL 1.10V OK',
+    status: 'REFERENCE VIEW',
     color: '#f59e0b',
     right: '5.5%',
     top: '56.4%',
@@ -2138,7 +2198,7 @@ const QUEUE_TEST_POINTS = [
     id: 'q-batt',
     code: 'BATT-0',
     label: 'LI-ION CELL TELEMETRY',
-    status: 'HEALTH: 94% · 34°C',
+    status: 'REFERENCE VIEW',
     color: '#10b981',
     right: '4.5%',
     top: '68.1%',
@@ -2235,7 +2295,7 @@ function QueueCameraFocusOverlay({ animated }: { animated: boolean }) {
       </div>
       <div className="camera-telemetry-tag">
         <span className="camera-telemetry-dot" />
-        <span>OPTICAL RETICLE // 12MP DUAL OIS</span>
+        <span>CAMERA ASSEMBLY // REFERENCE VIEW</span>
       </div>
     </div>
   )
@@ -2321,7 +2381,7 @@ function CasesPage({
         <div className="queue-hud-header">
           <div className="queue-telemetry-chip">
             <span className="queue-telemetry-dot" />
-            <span>DIAGNOSTIC QUEUE // ACTIVE WORKSTATION</span>
+            <span>REPAIR QUEUE // ACTIVE CASES</span>
           </div>
           <div className="queue-header-row">
             <div className="queue-title-wrap">
@@ -2331,7 +2391,7 @@ function CasesPage({
               </span>
             </div>
             <button className="button button-primary queue-new-btn" onClick={onNew}>
-              <Plus size={15} /> New repair
+              <Plus size={15} /> Create repair case
             </button>
           </div>
         </div>
@@ -2345,7 +2405,7 @@ function CasesPage({
                 aria-label="Search repair queue"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search ID, brand, model, issue..."
+                placeholder="Search by case ID, brand, model, or issue…"
               />
               {query && (
                 <button onClick={() => setQuery('')} aria-label="Clear search">
@@ -2459,7 +2519,7 @@ function CasesPage({
                         <div className="row-actions-cell" onClick={(e) => e.stopPropagation()}>
                           <button
                             className="row-delete-btn"
-                            title="Delete device"
+                            title="Delete repair case"
                             onClick={() => onDelete(item.id, item.brand, item.model)}
                           >
                             <Trash2 size={14} />
@@ -2481,8 +2541,8 @@ function CasesPage({
           ) : (
             <EmptyState
               icon={PackageSearch}
-              title="No devices in active queue"
-              description="All active devices have been serviced or match none of the filters."
+              title="No active repair cases"
+              description="No active cases match the current filters."
             />
           )}
         </div>
@@ -2496,7 +2556,7 @@ const DIAGNOSTICS_TEST_POINTS = [
     id: 'd-holo',
     code: 'HOLO-01',
     label: 'EXPLODED ASSEMBLY HUD',
-    status: 'PROJECTION 100% NOMINAL',
+    status: 'REFERENCE VIEW',
     color: '#38bdf8',
     right: '23.3%',
     top: '33.0%',
@@ -2506,7 +2566,7 @@ const DIAGNOSTICS_TEST_POINTS = [
     id: 'd-wave',
     code: 'SIG-GEN',
     label: 'FREQUENCY ANALYZER',
-    status: '142.5 MHz NOMINAL',
+    status: 'SIGNAL REFERENCE',
     color: '#2dd4bf',
     right: '6.2%',
     top: '18.2%',
@@ -2516,7 +2576,7 @@ const DIAGNOSTICS_TEST_POINTS = [
     id: 'd-cam',
     code: 'CAM-ARRAY',
     label: 'TRIPLE OPTICAL SENSOR',
-    status: 'OIS COIL CALIBRATED',
+    status: 'SENSOR REFERENCE',
     color: '#38bdf8',
     right: '26.8%',
     top: '73.8%',
@@ -2526,7 +2586,7 @@ const DIAGNOSTICS_TEST_POINTS = [
     id: 'd-soc',
     code: 'AP-SoC',
     label: 'LOGIC BOARD PROCESSOR',
-    status: 'CORE VOLTAGE 1.10V OK',
+    status: 'BOARD REFERENCE',
     color: '#f59e0b',
     right: '16.0%',
     top: '69.4%',
@@ -2536,7 +2596,7 @@ const DIAGNOSTICS_TEST_POINTS = [
     id: 'd-batt',
     code: 'BATT-TERM',
     label: 'BATTERY CHARGE RAIL',
-    status: '3.85V NOMINAL · 32°C',
+    status: 'BATTERY REFERENCE',
     color: '#10b981',
     right: '8.0%',
     top: '75.0%',
@@ -2607,7 +2667,7 @@ function DiagnosticsHoloOverlay({ animated }: { animated: boolean }) {
       )}
       <div className="holo-telemetry-tag">
         <span className="holo-tag-dot" />
-        <span>HOLO-HUD // EXPLODED ASSEMBLY VIEW</span>
+        <span>COMPONENT VIEW // DIAGNOSTIC REFERENCE</span>
       </div>
     </div>
   )
@@ -2619,7 +2679,7 @@ function DiagnosticsWaveformOverlay({ animated }: { animated: boolean }) {
       {animated && <div className="waveform-signal-pulse" />}
       <div className="waveform-telemetry-pill">
         <span className="waveform-dot" />
-        <span>142.5 MHz // RF NOMINAL</span>
+        <span>SIGNAL ANALYZER // REFERENCE</span>
       </div>
     </div>
   )
@@ -2635,6 +2695,8 @@ function DiagnosticsPage({
   stale,
   generating,
   recordingTest,
+  recordingComponent,
+  recordingComponentTest,
   recordingOutcome,
   testForm,
   setTestForm,
@@ -2642,6 +2704,8 @@ function DiagnosticsPage({
   setOutcomeForm,
   onSelect,
   onAddTest,
+  onAddComponent,
+  onAddComponentTest,
   onGenerate,
   onSaveOutcome,
   onDelete,
@@ -2657,6 +2721,8 @@ function DiagnosticsPage({
   stale: boolean
   generating: boolean
   recordingTest: boolean
+  recordingComponent: boolean
+  recordingComponentTest: number | null
   recordingOutcome: boolean
   testForm: { test_name: string; result: TestStatus; observed_result: string; details: string }
   setTestForm: Dispatch<SetStateAction<{ test_name: string; result: TestStatus; observed_result: string; details: string }>>
@@ -2664,6 +2730,8 @@ function DiagnosticsPage({
   setOutcomeForm: Dispatch<SetStateAction<{ confirmed_fault: string; repair_action: string; outcome: string; status: 'testing' | 'completed' | 'in_repair' }>>
   onSelect: (id: string) => void
   onAddTest: (event: FormEvent<HTMLFormElement>) => void
+  onAddComponent: (data: { component_name: string; model_part_number?: string }) => Promise<boolean>
+  onAddComponentTest: (componentId: number, data: { test_name: string; result: ComponentTestStatus; observed_result: string; details: string }) => Promise<boolean>
   onGenerate: () => void
   onSaveOutcome: (event: FormEvent<HTMLFormElement>) => void
   onDelete: (id: string, brand: string, model: string) => void
@@ -2736,7 +2804,7 @@ function DiagnosticsPage({
         <div className="diagnostics-hud-header">
           <div className="diagnostics-telemetry-chip">
             <span className="diagnostics-telemetry-dot" />
-            <span>OPTICAL DIAGNOSTIC LAB // MULTI-SPECTRAL TELEMETRY</span>
+            <span>DIAGNOSTICS // REPAIR CASE WORKSPACE</span>
           </div>
           <div className="diagnostics-header-row">
             <h1 className="diagnostics-title">Diagnostics</h1>
@@ -2751,9 +2819,9 @@ function DiagnosticsPage({
       <div className="diagnostic-select-bar">
         <div className="select-case-mark"><Stethoscope size={16} /></div>
         <label className="case-picker">
-          <span className="sr-only">Select device</span>
+          <span className="sr-only">Select a repair case</span>
           <select value={selected?.id || ''} onChange={(e) => onSelect(e.target.value)}>
-            <option value="" disabled>Select device</option>
+            <option value="" disabled>Select a repair case</option>
             {cases.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.id} · {item.brand} {item.model} — {item.issue_title}
@@ -2768,7 +2836,7 @@ function DiagnosticsPage({
             className="button button-ghost-danger button-sm"
             onClick={() => onDelete(selected.id, selected.brand, selected.model)}
           >
-            <Trash2 size={14} /> Delete
+            <Trash2 size={14} /> Delete case
           </button>
         )}
       </div>
@@ -2779,14 +2847,14 @@ function DiagnosticsPage({
           onClick={() => setDiagnosticsTab('evidence')}
         >
           <Activity size={15} />
-          Evidence & Repair Outcome
+          Diagnostic evidence & outcome
         </button>
         <button
           className={`diagnostics-tab-btn ${diagnosticsTab === 'recommendation' ? 'active' : ''}`}
           onClick={() => setDiagnosticsTab('recommendation')}
         >
           <Sparkles size={15} />
-          AI Recommendation
+          AI diagnostic recommendation
           {recommendation && <span className="tab-indicator-dot" />}
         </button>
       </div>
@@ -2795,8 +2863,8 @@ function DiagnosticsPage({
         <div className="surface-card">
           <EmptyState
             icon={Stethoscope}
-            title="Choose a device"
-            description="Select an existing device from the dropdown above to view or enter diagnostic data."
+            title="Select a repair case"
+            description="Choose a case above to review its symptoms, test evidence, and recommendations."
           />
         </div>
       ) : (
@@ -2817,12 +2885,12 @@ function DiagnosticsPage({
                   <div className="case-overview-status">
                     <StatusPill status={selected.status} />
                     <button className="button button-ghost button-sm report-action" onClick={() => { reportPrintStarted.current = false; setReportGeneratedAt(new Date().toISOString()) }}>
-                      <Printer size={14} /> Generate report
+                      <Printer size={14} /> Generate repair report
                     </button>
                   </div>
                 </div>
                 <div className="case-symptoms">
-                  <span className="meta-label">SYMPTOMS</span>
+                  <span className="meta-label">REPORTED SYMPTOMS</span>
                   <p>{selected.symptoms}</p>
                 </div>
                 <div className="case-overview-foot">
@@ -2834,13 +2902,24 @@ function DiagnosticsPage({
                 </div>
               </section>
 
-              {selected.data_origin === 'demo' && <div className="demo-record-note">Demo record · timeline entries and alerts below are from sample data.</div>}
+              <ComponentHealthPanel
+                key={selected.id}
+                caseId={selected.id}
+                components={selected.components}
+                closed={selected.status === 'completed' || selected.status === 'on_hold'}
+                recordingComponent={recordingComponent}
+                recordingComponentTest={recordingComponentTest}
+                onAddComponent={onAddComponent}
+                onAddComponentTest={onAddComponentTest}
+              />
+
+              {selected.data_origin === 'demo' && <div className="demo-record-note">Demo record · The timeline and alerts below use sample data.</div>}
               <SafetyAlertsPanel alerts={selected.safety_alerts} />
 
               <section className="surface-card evidence-card">
                 <div className="section-card-head">
                   <div>
-                    <h3>Diagnostic evidence</h3>
+                    <h3>Diagnostic test evidence</h3>
                   </div>
                   <span className="section-count">{selected.tests.length} RESULTS</span>
                 </div>
@@ -2856,7 +2935,7 @@ function DiagnosticsPage({
                           <div className="evidence-heading">
                             <strong>{test.test_name}</strong>
                             <span className={`result-tag result-tag-${test.result}`}>
-                              {test.result.replaceAll('_', ' ')}
+                              {titleCase(test.result.replaceAll('_', ' '))}
                             </span>
                           </div>
                           <p>{test.observed_result}</p>
@@ -2869,7 +2948,7 @@ function DiagnosticsPage({
                 ) : (
                   <div className="inline-empty">
                     <CircleHelp size={16} />
-                    <span>No test results yet. Record the first test below.</span>
+                    <span>No diagnostic tests recorded yet. Add the first test below.</span>
                   </div>
                 )}
 
@@ -2879,9 +2958,9 @@ function DiagnosticsPage({
                   </div>
                 ) : (
                   <form className="add-test-form" onSubmit={onAddTest}>
-                    <div className="form-section-label">ADD A TEST RESULT</div>
+                    <div className="form-section-label">RECORD A DIAGNOSTIC TEST</div>
                     <div className="form-grid two-cols">
-                      <label className="span-two">Test performed
+                      <label className="span-two">Test
                         <select value={testForm.test_name} onChange={(e) => setTestForm((v) => ({ ...v, test_name: e.target.value }))}>
                           {testSuggestions.map((item) => <option key={item}>{item}</option>)}
                         </select>
@@ -2892,15 +2971,15 @@ function DiagnosticsPage({
                         </select>
                       </label>
                       <label>Observation
-                        <textarea required rows={2} value={testForm.observed_result} onChange={(e) => setTestForm((v) => ({ ...v, observed_result: e.target.value }))} placeholder="What was observed?" />
+                        <textarea required rows={2} value={testForm.observed_result} onChange={(e) => setTestForm((v) => ({ ...v, observed_result: e.target.value }))} placeholder="Describe the observed result" />
                       </label>
                       <label className="span-two">Notes <span className="label-muted">(optional)</span>
-                        <input value={testForm.details} onChange={(e) => setTestForm((v) => ({ ...v, details: e.target.value }))} placeholder="Additional conditions or context" />
+                        <input value={testForm.details} onChange={(e) => setTestForm((v) => ({ ...v, details: e.target.value }))} placeholder="Conditions or additional context" />
                       </label>
                     </div>
                     <div className="form-footer">
                       <button className="button button-dark" type="submit" disabled={recordingTest}>
-                        {recordingTest ? <LoaderCircle size={15} className="spin" /> : <Plus size={15} />} Save test
+                        {recordingTest ? <LoaderCircle size={15} className="spin" /> : <Plus size={15} />} Save test result
                       </button>
                     </div>
                   </form>
@@ -2918,13 +2997,13 @@ function DiagnosticsPage({
                 </div>
                 <form onSubmit={onSaveOutcome} className="outcome-form">
                   <label>Confirmed fault
-                    <input required minLength={3} value={outcomeForm.confirmed_fault} onChange={(e) => setOutcomeForm((v) => ({ ...v, confirmed_fault: e.target.value }))} placeholder="Diagnosed fault" />
+                    <input required minLength={3} value={outcomeForm.confirmed_fault} onChange={(e) => setOutcomeForm((v) => ({ ...v, confirmed_fault: e.target.value }))} placeholder="Enter the confirmed fault" />
                   </label>
                   <label>Repair action taken
-                    <textarea required minLength={3} rows={2} value={outcomeForm.repair_action} onChange={(e) => setOutcomeForm((v) => ({ ...v, repair_action: e.target.value }))} placeholder="What was repaired or replaced?" />
+                    <textarea required minLength={3} rows={2} value={outcomeForm.repair_action} onChange={(e) => setOutcomeForm((v) => ({ ...v, repair_action: e.target.value }))} placeholder="Describe what was repaired or replaced" />
                   </label>
                   <label>Verification outcome
-                    <textarea required minLength={3} rows={2} value={outcomeForm.outcome} onChange={(e) => setOutcomeForm((v) => ({ ...v, outcome: e.target.value }))} placeholder="Final verification result" />
+                    <textarea required minLength={3} rows={2} value={outcomeForm.outcome} onChange={(e) => setOutcomeForm((v) => ({ ...v, outcome: e.target.value }))} placeholder="Record the final verification result" />
                   </label>
                   <div className="outcome-actions">
                     <label className="outcome-status-label">Set status
@@ -2935,7 +3014,7 @@ function DiagnosticsPage({
                       </select>
                     </label>
                     <button className="button button-primary" type="submit" disabled={recordingOutcome}>
-                      {recordingOutcome ? <LoaderCircle size={15} className="spin" /> : <CheckCircle2 size={15} />} Save outcome
+                      {recordingOutcome ? <LoaderCircle size={15} className="spin" /> : <CheckCircle2 size={15} />} Save repair outcome
                     </button>
                   </div>
                 </form>
@@ -2957,7 +3036,7 @@ function DiagnosticsPage({
                 <div className="ai-panel-header">
                   <div className="ai-panel-icon"><Sparkles size={18} /></div>
                   <div>
-                    <h3>Diagnostic copilot</h3>
+                    <h3>AI diagnostic recommendation</h3>
                     <p className="ai-model-tag">
                       {health?.model_configured ? `${health.model_name} (Gemini API)` : 'Local rule-based guidance'}
                     </p>
@@ -2967,10 +3046,10 @@ function DiagnosticsPage({
                     onClick={onGenerate}
                     disabled={generating || selected.status === 'completed'}
                   >
-                    {generating ? (
-                      <><LoaderCircle size={15} className="spin" /> Reasoning…</>
+                      {generating ? (
+                      <><LoaderCircle size={15} className="spin" /> Generating…</>
                     ) : (
-                      <><Sparkles size={15} /> {recommendation ? 'Regenerate recommendation' : 'Generate recommendation'}</>
+                      <><Sparkles size={15} /> {recommendation ? 'Refresh recommendation' : 'Generate recommendation'}</>
                     )}
                   </button>
                 </div>
@@ -2981,8 +3060,8 @@ function DiagnosticsPage({
               ) : (
                 <section className="surface-card waiting-panel-clean">
                   <BrainCircuit size={28} className="muted-icon" />
-                  <h3>No recommendation generated yet</h3>
-                  <p>Click "Generate recommendation" above to produce guided checks from entered evidence.</p>
+                  <h3>No recommendation generated</h3>
+                  <p>Generate a recommendation to review suggested checks based on this repair case and its saved diagnostic evidence.</p>
                 </section>
               )}
 
@@ -2992,6 +3071,163 @@ function DiagnosticsPage({
       )}
       </div>
     </div>
+  )
+}
+
+function ComponentHealthPanel({
+  caseId,
+  components,
+  closed,
+  recordingComponent,
+  recordingComponentTest,
+  onAddComponent,
+  onAddComponentTest,
+}: {
+  caseId: string
+  components: ComponentRecord[]
+  closed: boolean
+  recordingComponent: boolean
+  recordingComponentTest: number | null
+  onAddComponent: (data: { component_name: string; model_part_number?: string }) => Promise<boolean>
+  onAddComponentTest: (componentId: number, data: { test_name: string; result: ComponentTestStatus; observed_result: string; details: string }) => Promise<boolean>
+}) {
+  const [componentName, setComponentName] = useState('')
+  const [partNumber, setPartNumber] = useState('')
+
+  async function submitComponent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const name = componentName.trim()
+    if (!name) return
+    const saved = await onAddComponent({ component_name: name, model_part_number: partNumber.trim() || undefined })
+    if (saved) {
+      setComponentName('')
+      setPartNumber('')
+    }
+  }
+
+  return (
+    <section className="surface-card component-health-panel">
+      <div className="section-card-head">
+        <div><h3>Component health status</h3><p>Health reflects the latest saved component test and its scope. Components without test evidence remain Unknown.</p></div>
+        <span className="section-count">{components.length} COMPONENTS</span>
+      </div>
+      {components.length ? (
+        <div className="component-health-list">
+          {components.map((component) => (
+            <ComponentHealthCard
+              key={component.id}
+              component={component}
+              closed={closed}
+              saving={recordingComponentTest === component.id}
+              onAddTest={(data) => onAddComponentTest(component.id, data)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="inline-empty component-health-empty"><Cpu size={16} /><span>No components are recorded for this repair yet. New components remain Unknown until test evidence is saved.</span></div>
+      )}
+      {closed ? (
+        <div className="read-only-note">This case is completed or on hold. Update its status before adding components or tests.</div>
+      ) : (
+        <form className="component-create-form" onSubmit={submitComponent}>
+          <div className="form-section-label">ADD COMPONENT</div>
+          <div className="component-create-grid">
+            <label>Component name
+              <input required maxLength={160} value={componentName} onChange={(event) => setComponentName(event.target.value)} placeholder="e.g. Charging port" />
+            </label>
+            <label>Model / part number <span className="label-muted">(optional)</span>
+              <input maxLength={160} value={partNumber} onChange={(event) => setPartNumber(event.target.value)} placeholder="Enter the marked part number, if known" />
+            </label>
+          </div>
+          <div className="form-footer">
+            <button className="button button-dark" type="submit" disabled={recordingComponent || !componentName.trim()}>
+              {recordingComponent ? <LoaderCircle size={15} className="spin" /> : <Plus size={15} />} Add component
+            </button>
+          </div>
+          <p className="component-health-note">Health status reflects the latest recorded component test. It does not guarantee performance beyond the test conditions.</p>
+        </form>
+      )}
+      <span className="sr-only">Repair case {caseId}</span>
+    </section>
+  )
+}
+
+function ComponentHealthCard({ component, closed, saving, onAddTest }: {
+  component: ComponentRecord
+  closed: boolean
+  saving: boolean
+  onAddTest: (data: { test_name: string; result: ComponentTestStatus; observed_result: string; details: string }) => Promise<boolean>
+}) {
+  const [testName, setTestName] = useState('')
+  const [result, setResult] = useState<ComponentTestStatus>('inconclusive')
+  const [observation, setObservation] = useState('')
+  const [details, setDetails] = useState('')
+
+  async function submitTest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!testName.trim() || !observation.trim()) return
+    const saved = await onAddTest({ test_name: testName.trim(), result, observed_result: observation.trim(), details: details.trim() })
+    if (saved) {
+      setTestName('')
+      setObservation('')
+      setDetails('')
+      setResult('inconclusive')
+    }
+  }
+
+  const statusLabel: Record<ComponentRecord['health_status'], string> = {
+    working: 'Working', faulty: 'Faulty', needs_testing: 'Needs testing', unknown: 'Unknown',
+  }
+
+  return (
+    <article className="component-health-item">
+      <div className="component-health-heading">
+        <div className="component-health-icon"><Cpu size={16} /></div>
+        <div className="component-health-title"><strong>{component.component_name}</strong><small>{component.model_part_number || 'Part number not recorded'}</small></div>
+        <span className={`component-health-status status-${component.health_status}`}>{statusLabel[component.health_status]}</span>
+      </div>
+      {component.tests.length ? (
+        <ol className="component-test-history">
+          {component.tests.map((test) => (
+            <li key={test.id}>
+              <div className="component-test-heading"><strong>{test.test_name}</strong><span className={`result-tag result-tag-${test.result}`}>{titleCase(test.result.replaceAll('_', ' '))}</span></div>
+              <p>{test.observed_result}</p>
+              {test.details && <small>{test.details}</small>}
+              <time>{dateTimeLabel(test.performed_at)}</time>
+            </li>
+          ))}
+        </ol>
+      ) : <p className="component-no-evidence">No component test evidence has been recorded. Health status: Unknown.</p>}
+      {!closed && (
+        <form className="component-test-form" onSubmit={submitTest}>
+          <div className="form-section-label">RECORD COMPONENT TEST</div>
+          <div className="component-test-grid">
+            <label>Test performed
+              <input required maxLength={180} value={testName} onChange={(event) => setTestName(event.target.value)} placeholder="Enter the component test" />
+            </label>
+            <label>Result
+              <select value={result} onChange={(event) => setResult(event.target.value as ComponentTestStatus)}>
+                <option value="pass">Pass</option>
+                <option value="fail">Fail</option>
+                <option value="inconclusive">Inconclusive</option>
+                <option value="not_tested">Not tested</option>
+              </select>
+            </label>
+            <label className="component-test-observation">Observation
+              <textarea required maxLength={1500} rows={2} value={observation} onChange={(event) => setObservation(event.target.value)} placeholder="Describe the observed result" />
+            </label>
+            <label className="component-test-notes">Notes <span className="label-muted">(optional)</span>
+              <input maxLength={1500} value={details} onChange={(event) => setDetails(event.target.value)} placeholder="Conditions or context" />
+            </label>
+          </div>
+          <div className="form-footer">
+            <button className="button button-dark" type="submit" disabled={saving || !testName.trim() || !observation.trim()}>
+              {saving ? <LoaderCircle size={15} className="spin" /> : <ClipboardCheck size={15} />} Save component test
+            </button>
+          </div>
+        </form>
+      )}
+    </article>
   )
 }
 
@@ -3015,7 +3251,7 @@ function SafetyAlertsPanel({ alerts }: { alerts: SafetyAlert[] }) {
 function TimelineCard({ events, isDemo }: { events: TimelineEvent[]; isDemo: boolean }) {
   return (
     <section className="surface-card repair-timeline-card">
-      <div className="section-card-head"><div><h3>Repair intelligence timeline</h3><p>{isDemo ? 'Sample timeline from saved demo records.' : 'Events are shown only when supported by saved records.'}</p></div></div>
+      <div className="section-card-head"><div><h3>Repair timeline</h3><p>{isDemo ? 'Sample timeline from demo records.' : 'Timeline events appear only when supported by saved records.'}</p></div></div>
       {events.length ? (
         <ol className="repair-timeline-list">
           {events.map((event) => (
@@ -3028,7 +3264,7 @@ function TimelineCard({ events, isDemo }: { events: TimelineEvent[]; isDemo: boo
             </li>
           ))}
         </ol>
-      ) : <div className="inline-empty">No saved timeline events are available.</div>}
+      ) : <div className="inline-empty">No timeline events are available for this repair case.</div>}
     </section>
   )
 }
@@ -3036,18 +3272,18 @@ function TimelineCard({ events, isDemo }: { events: TimelineEvent[]; isDemo: boo
 function SimilarRepairMemory({ matches, onOpen }: { matches: SimilarRepair[]; onOpen: (id: string) => void }) {
   return (
     <section className="surface-card similar-repair-card">
-      <div className="section-card-head"><div><h3>Similar repair memory</h3><p>Completed, technician-confirmed repairs with overlapping symptoms or test evidence.</p></div></div>
+      <div className="section-card-head"><div><h3>Similar completed repairs</h3><p>Completed repairs with overlapping symptoms or test evidence.</p></div></div>
       {matches.length ? <div className="similar-repair-list">{matches.map((item) => (
         <article className="similar-repair-item" key={item.id}>
-          <div className="similar-repair-head"><span className="previous-case-label">PREVIOUS CASE</span><button onClick={() => onOpen(item.id)}>{item.id} · {item.device} <ChevronRight size={13} /></button></div>
+          <div className="similar-repair-head"><span className="previous-case-label">COMPLETED CASE</span><button onClick={() => onOpen(item.id)}>{item.id} · {item.device} <ChevronRight size={13} /></button></div>
           <strong>{item.issue_title}</strong>
           <p>{item.symptoms}</p>
           <ul className="similar-reasons">{item.match_reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
           {item.tests.length > 0 && <div className="similar-test-list"><strong>Recorded tests</strong>{item.tests.map((test, index) => <p key={`${item.id}-${index}`}>{test.test_name} · {titleCase(test.result.replaceAll('_', ' '))}: {test.observed_result}</p>)}</div>}
-          <div className="similar-outcome"><span>Past confirmed fault</span><p>{item.confirmed_fault}</p><span>Repair action</span><p>{item.repair_action || 'Unavailable'}</p><span>Recorded outcome</span><p>{item.outcome}</p></div>
+          <div className="similar-outcome"><span>Confirmed fault</span><p>{item.confirmed_fault}</p><span>Repair action</span><p>{item.repair_action || 'Not available'}</p><span>Recorded outcome</span><p>{item.outcome}</p></div>
           <small className="similar-disclaimer">{item.disclaimer}</small>
         </article>
-      ))}</div> : <div className="inline-empty">No completed non-demo repair with sufficiently similar saved symptoms or test evidence was found.</div>}
+      ))}</div> : <div className="inline-empty">No comparable completed repairs were found in the saved records.</div>}
     </section>
   )
 }
@@ -3059,7 +3295,7 @@ function RepairReportPrint({ detail, recommendation, alerts, generatedAt, stale 
   generatedAt: string | null
   stale: boolean
 }) {
-  const unavailable = 'Unavailable in saved records'
+  const unavailable = 'Not available in saved records'
   return (
     <article className="repair-report-print" aria-hidden={!generatedAt}>
       <header><strong>FIXORA AI</strong><span>Electronics Repair Report</span><small>Generated {generatedAt ? dateTimeLabel(generatedAt) : ''}</small></header>
@@ -3067,10 +3303,10 @@ function RepairReportPrint({ detail, recommendation, alerts, generatedAt, stale 
       <section><h2>Device</h2><p><b>Type:</b> {detail.device_category || unavailable}</p><p><b>Brand and model:</b> {[detail.brand, detail.model].filter(Boolean).join(' ') || unavailable}</p><p><b>Current status:</b> {statusNames[detail.status]}</p><p><b>Record origin:</b> {detail.data_origin === 'demo' ? 'Demo sample record' : 'User-entered repair record'}</p></section>
       <section><h2>Reported issue and symptoms</h2><p><b>Issue:</b> {detail.issue_title || unavailable}</p><p>{detail.symptoms || unavailable}</p></section>
       <section><h2>Diagnostic tests</h2>{detail.tests.length ? detail.tests.map((test) => <div className="report-test" key={test.id}><strong>{test.test_name} · {titleCase(test.result.replaceAll('_', ' '))}</strong><p>{test.observed_result || unavailable}</p>{test.details && <p><b>Notes:</b> {test.details}</p>}<small>{dateTimeLabel(test.performed_at)}</small></div>) : <p>{unavailable}</p>}</section>
-      <section><h2>Recommendation</h2>{recommendation ? <><p><b>Source:</b> {recommendation.provider === 'gemini_api' ? `Gemma (${recommendation.model_name})` : 'LOCAL RULES'}</p><p><b>Generated:</b> {recommendation.generated_at ? dateTimeLabel(recommendation.generated_at) : unavailable}</p>{stale && <p><b>Evidence status:</b> Outdated; new saved evidence may not be included.</p>}<p><b>Saved tests considered:</b> {(recommendation.content.evidence_test_ids || []).map((id) => detail.tests.find((test) => test.id === id)).filter(Boolean).map((test) => `${test!.test_name} (${titleCase(test!.result.replaceAll('_', ' '))})`).join(', ') || 'None recorded'}</p><p>{recommendation.content.summary}</p><ul>{recommendation.content.next_checks.map((check, index) => <li key={`${check.name}-${index}`}><b>{check.name}:</b> {check.purpose} {check.instructions}</li>)}</ul></> : <p>{unavailable}</p>}</section>
+      <section><h2>Recommendation</h2>{recommendation ? <><p><b>Source:</b> {recommendation.provider === 'gemini_api' ? `Gemma (${recommendation.model_name})` : 'Local rules'}</p><p><b>Generated:</b> {recommendation.generated_at ? dateTimeLabel(recommendation.generated_at) : unavailable}</p>{stale && <p><b>Evidence status:</b> Outdated; new saved evidence may not be included.</p>}<p><b>Saved tests considered:</b> {(recommendation.content.evidence_test_ids || []).map((id) => detail.tests.find((test) => test.id === id)).filter(Boolean).map((test) => `${test!.test_name} (${titleCase(test!.result.replaceAll('_', ' '))})`).join(', ') || 'No test results recorded'}</p><p>{recommendation.content.summary}</p><ul>{recommendation.content.next_checks.map((check, index) => <li key={`${check.name}-${index}`}><b>{check.name}:</b> {check.purpose} {check.instructions}</li>)}</ul></> : <p>{unavailable}</p>}</section>
       <section><h2>Recorded repair outcome</h2><p><b>Confirmed fault:</b> {detail.confirmed_fault || unavailable}</p><p><b>Repair action:</b> {detail.repair_action || unavailable}</p><p><b>Verification outcome:</b> {detail.outcome || unavailable}</p></section>
-      <section><h2>Safety warnings</h2>{alerts.length ? alerts.map((alert) => <p key={alert.title}><b>{alert.title}:</b> {alert.instruction} Evidence: {alert.evidence}</p>) : <p>No safety alert matched the currently saved case text.</p>}</section>
-      <footer>Fixora AI · Report reflects information saved for this repair at generation time.</footer>
+      <section><h2>Safety alerts</h2>{alerts.length ? alerts.map((alert) => <p key={alert.title}><b>{alert.title}:</b> {alert.instruction} Evidence: {alert.evidence}</p>) : <p>No safety alerts were identified in the saved case details.</p>}</section>
+      <footer>Fixora AI · This report reflects information saved for this repair when it was generated.</footer>
     </article>
   )
 }
@@ -3081,20 +3317,20 @@ function RecommendationView({ recommendation, stale, tests }: { recommendation: 
   const isLive = recommendation.provider === 'gemini_api'
 
   return (
-    <section className={`surface-card recommendation-card ${stale ? 'recommendation-stale' : ''}`}>
+      <section className={`surface-card recommendation-card ${stale ? 'recommendation-stale' : ''}`}>
       <div className="recommendation-head">
         <div className="recommendation-head-icon"><Sparkles size={16} /></div>
         <div>
           <h3>Evidence review</h3>
         </div>
         <span className={`source-mode ${isLive ? 'source-mode-live' : 'source-mode-fallback'}`}>
-          {isLive ? 'GEMMA 4' : 'LOCAL RULES'}
+          {isLive ? 'GEMMA 4' : 'Local rules'}
         </span>
       </div>
 
       {stale && (
         <div className="stale-banner">
-          <AlertCircle size={14} /> New test evidence was added after this recommendation.
+          <AlertCircle size={14} /> New test evidence was saved after this recommendation was generated.
         </div>
       )}
 
@@ -3123,7 +3359,7 @@ function RecommendationView({ recommendation, stale, tests }: { recommendation: 
             })}
           </ul>
         ) : (
-          <p>No saved test records were included in this recommendation.</p>
+          <p>No diagnostic test results were included in this recommendation.</p>
         )}
       </div>
 
@@ -3144,7 +3380,7 @@ function RecommendationView({ recommendation, stale, tests }: { recommendation: 
               <div className="hypothesis-title-wrap">
                 <strong>{hypothesis.fault}</strong>
                 <span className={`likelihood-label likelihood-${hypothesis.likelihood}`}>
-                  {titleCase(hypothesis.likelihood)}
+                  Likelihood: {titleCase(hypothesis.likelihood)}
                 </span>
               </div>
               <ChevronDown size={14} />
@@ -3154,7 +3390,7 @@ function RecommendationView({ recommendation, stale, tests }: { recommendation: 
                 <p>{hypothesis.reasoning}</p>
                 {hypothesis.supporting_evidence.length > 0 && (
                   <div className="evidence-chips-group">
-                    <span className="evidence-group-label">SUPPORTING</span>
+                    <span className="evidence-group-label">SUPPORTING EVIDENCE</span>
                     {hypothesis.supporting_evidence.map((evidence, i) => (
                       <div className="evidence-chip positive" key={`${evidence}-${i}`}>
                         <Check size={12} /> {evidence}
@@ -3164,7 +3400,7 @@ function RecommendationView({ recommendation, stale, tests }: { recommendation: 
                 )}
                 {hypothesis.contradicting_evidence.length > 0 && (
                   <div className="evidence-chips-group">
-                    <span className="evidence-group-label">CONTRADICTING</span>
+                    <span className="evidence-group-label">CONTRADICTING EVIDENCE</span>
                     {hypothesis.contradicting_evidence.map((evidence, i) => (
                       <div className="evidence-chip caution" key={`${evidence}-${i}`}>
                         <AlertCircle size={12} /> {evidence}
@@ -3203,7 +3439,7 @@ function RecommendationView({ recommendation, stale, tests }: { recommendation: 
 
       {recommendation.sources.length > 0 && (
         <div className="source-reference-section">
-          <span className="evidence-group-label">REFERENCE NOTES</span>
+          <span className="evidence-group-label">REFERENCES</span>
           {recommendation.sources.map((source) => (
             <div className="source-reference" key={source.id}>
               <div>
@@ -3273,7 +3509,7 @@ function MemoryPage({
     <>
       <div className="page-heading">
         <div>
-          <h1>Repair memory</h1>
+          <h1>Repair Memory</h1>
         </div>
         <div className="memory-count-pill">
           <History size={15} /> {cases.length} completed cases
@@ -3286,7 +3522,7 @@ function MemoryPage({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search completed devices, faults, or outcomes..."
+            placeholder="Search by device, confirmed fault, or outcome…"
           />
           {query && (
             <button onClick={() => setQuery('')} aria-label="Clear memory search">
@@ -3307,18 +3543,18 @@ function MemoryPage({
                   </div>
                   <span className="memory-device-line">{item.brand} {item.model} · {dateLabel(item.updated_at)}</span>
                   <span className="memory-fault-line">
-                    <CheckCircle2 size={13} /> Confirmed: {item.confirmed_fault}
+                    <CheckCircle2 size={13} /> Confirmed fault: {item.confirmed_fault}
                   </span>
                   <span className="memory-action-line">{item.repair_action}</span>
                 </div>
                 <div className="memory-record-outcome">
                   <span>OUTCOME</span>
-                  <p>{item.outcome || 'None'}</p>
+                  <p>{item.outcome || 'No outcome recorded'}</p>
                 </div>
                 <div className="row-actions-cell" onClick={(e) => e.stopPropagation()}>
                   <button
                     className="row-delete-btn"
-                    title="Delete record"
+                    title="Delete repair record"
                     onClick={() => onDelete(item.id, item.brand, item.model)}
                   >
                     <Trash2 size={14} />
@@ -3331,13 +3567,285 @@ function MemoryPage({
         ) : (
           <EmptyState
             icon={History}
-            title="No completed repair records"
-            description="Devices marked as completed with a confirmed fault appear here."
+            title="No completed repair cases"
+            description="Completed cases with confirmed outcomes appear here."
           />
         )}
       </section>
     </>
   )
+}
+
+function InventoryPage() {
+  const [inventory, setInventory] = useState<ComponentInventoryRecord[]>([])
+  const [candidates, setCandidates] = useState<InventoryComponentCandidate[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [query, setQuery] = useState('')
+  const [reuseFilter, setReuseFilter] = useState('all')
+  const [resaleFilter, setResaleFilter] = useState('all')
+  const [candidateId, setCandidateId] = useState('')
+  const [quantity, setQuantity] = useState('1')
+  const [condition, setCondition] = useState<ComponentCondition>('unknown')
+  const [conditionNotes, setConditionNotes] = useState('')
+  const [storageLocation, setStorageLocation] = useState('')
+
+  async function loadInventory(showLoading = true): Promise<boolean> {
+    if (showLoading) setLoading(true)
+    setError('')
+    try {
+      const [records, sources] = await Promise.all([api.inventory(), api.inventoryCandidates()])
+      setInventory(records)
+      setCandidates(sources)
+      setCandidateId((current) => current && sources.some((item) => String(item.id) === current) ? current : String(sources[0]?.id || ''))
+      return true
+    } catch (loadError) {
+      setError(errorMessage(loadError))
+      return false
+    } finally {
+      if (showLoading) setLoading(false)
+    }
+  }
+
+  useEffect(() => { void loadInventory() }, [])
+
+  async function mutate(action: () => Promise<unknown>, successText: string): Promise<boolean> {
+    if (busy) return false
+    setBusy(true)
+    setError('')
+    setMessage('')
+    try {
+      await action()
+      const refreshed = await loadInventory(false)
+      setMessage(refreshed ? successText : `${successText} Refresh the inventory to confirm current quantities and review status.`)
+      return true
+    } catch (actionError) {
+      setError(errorMessage(actionError))
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function addInventory(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!candidateId) return
+    const saved = await mutate(() => api.createInventory(Number(candidateId), {
+      quantity_available: Number(quantity),
+      condition,
+      condition_notes: conditionNotes.trim(),
+      storage_location: storageLocation.trim() || undefined,
+    }), 'Component added to inventory.')
+    if (saved) {
+      setConditionNotes('')
+      setStorageLocation('')
+      setQuantity('1')
+    }
+  }
+
+  const visibleInventory = inventory.filter((item) => {
+    const text = `${item.component_name} ${item.model_part_number || ''} ${item.case_id} ${item.source_device}`.toLowerCase()
+    return text.includes(query.toLowerCase())
+      && (reuseFilter === 'all' || item.reuse_status === reuseFilter)
+      && (resaleFilter === 'all' || item.resale_status === resaleFilter)
+  })
+
+  return (
+    <div className="inventory-page">
+      <div className="page-heading inventory-page-heading">
+        <div>
+          <h1>Parts inventory</h1>
+          <p className="page-subtitle">Track component stock, evidence-based reuse decisions, and resale reviews.</p>
+        </div>
+        <div className="inventory-total-pill"><PackageSearch size={16} /> {inventory.length} tracked components</div>
+      </div>
+
+      {message && <div className="inventory-feedback inventory-success" role="status"><CheckCircle2 size={16} />{message}<button onClick={() => setMessage('')} aria-label="Dismiss success message"><X size={14} /></button></div>}
+      {error && <div className="inventory-feedback inventory-error" role="alert"><AlertCircle size={16} />{error}<button onClick={() => setError('')} aria-label="Dismiss error message"><X size={14} /></button></div>}
+
+      <section className="surface-card inventory-intake-card">
+        <div className="section-card-head"><div><h3>Add component to inventory</h3><p>Select a component recorded in Diagnostics to keep its test evidence and repair source linked.</p></div></div>
+        {candidates.length ? (
+          <form className="inventory-intake-form" onSubmit={addInventory}>
+            <label>Recorded component
+              <select required value={candidateId} onChange={(event) => setCandidateId(event.target.value)}>
+                {candidates.map((item) => <option key={item.id} value={item.id}>{item.component_name}{item.model_part_number ? ` · ${item.model_part_number}` : ''} — {item.case_id} · {item.source_device} · {titleCase(item.health_status.replaceAll('_', ' '))}</option>)}
+              </select>
+            </label>
+            <label>Available quantity
+              <input required type="number" min="1" max="100000" value={quantity} onChange={(event) => setQuantity(event.target.value)} />
+            </label>
+            <label>Physical condition
+              <select value={condition} onChange={(event) => setCondition(event.target.value as ComponentCondition)}>
+                <option value="unknown">Unknown / not assessed</option><option value="new">New</option><option value="like_new">Like new</option><option value="good">Good</option><option value="fair">Fair</option><option value="damaged">Damaged</option>
+              </select>
+            </label>
+            <label>Condition observation
+              <input required minLength={3} maxLength={1500} value={conditionNotes} onChange={(event) => setConditionNotes(event.target.value)} placeholder="Describe the observed physical condition" />
+            </label>
+            <label className="inventory-location-field">Storage location <span className="label-muted">(optional)</span>
+              <input maxLength={180} value={storageLocation} onChange={(event) => setStorageLocation(event.target.value)} placeholder="Enter a shelf, bin, or location" />
+            </label>
+            <div className="inventory-intake-action"><button className="button button-dark" type="submit" disabled={busy || !candidateId || Number(quantity) < 1}>{busy ? <LoaderCircle size={15} className="spin" /> : <Plus size={15} />} Add to inventory</button></div>
+            <p className="inventory-policy-note">New inventory starts Under Review for reuse and resale. Missing test data does not imply approval.</p>
+          </form>
+        ) : (
+          <div className="inline-empty inventory-candidate-empty"><PackageSearch size={16} /><span>No components are available to add. Record a component in Diagnostics first.</span></div>
+        )}
+      </section>
+
+      <section className="surface-card inventory-list-card">
+        <div className="inventory-toolbar">
+          <label className="search-box inventory-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by component, part number, repair, or device" />{query && <button onClick={() => setQuery('')} aria-label="Clear search"><X size={14} /></button>}</label>
+          <label className="inventory-filter">Reuse <select value={reuseFilter} onChange={(event) => setReuseFilter(event.target.value)}><option value="all">All</option><option value="under_review">Under review</option><option value="available">Available</option><option value="not_eligible">Not eligible</option></select></label>
+          <label className="inventory-filter">Resale <select value={resaleFilter} onChange={(event) => setResaleFilter(event.target.value)}><option value="all">All</option><option value="under_review">Under review</option><option value="approved_for_resale">Approved</option><option value="not_eligible">Not eligible</option></select></label>
+          <button className="button button-ghost button-sm" onClick={() => void loadInventory()} disabled={loading}><RefreshCw size={14} /> Refresh inventory</button>
+        </div>
+        {loading ? (
+          <div className="inventory-state"><LoaderCircle size={19} className="spin" /><span>Loading inventory…</span></div>
+        ) : visibleInventory.length ? (
+          <div className="inventory-record-list">
+            {visibleInventory.map((item) => (
+              <InventoryRecordCard key={item.id} item={item} busy={busy} onMutate={mutate} />
+            ))}
+          </div>
+        ) : inventory.length ? (
+          <EmptyState icon={Search} title="No matching components" description="Try another search term or change the review filters." />
+        ) : (
+          <EmptyState icon={PackageSearch} title="No components in inventory" description="Add a component recorded in Diagnostics. Its test status and repair source will be carried over from saved records." />
+        )}
+      </section>
+    </div>
+  )
+}
+
+function InventoryRecordCard({ item, busy, onMutate }: {
+  item: ComponentInventoryRecord
+  busy: boolean
+  onMutate: (action: () => Promise<unknown>, successText: string) => Promise<boolean>
+}) {
+  const [condition, setCondition] = useState<ComponentCondition>(item.condition)
+  const [conditionNotes, setConditionNotes] = useState(item.condition_notes)
+  const [location, setLocation] = useState(item.storage_location || '')
+  const [adjustment, setAdjustment] = useState('')
+  const [adjustmentReason, setAdjustmentReason] = useState('')
+  const [reuseReason, setReuseReason] = useState('')
+  const [resaleReason, setResaleReason] = useState('')
+  const [movementQuantity, setMovementQuantity] = useState('1')
+  const [movementReason, setMovementReason] = useState('')
+  const supportsReview = item.health_status === 'working'
+    && ['new', 'like_new', 'good'].includes(item.condition)
+
+  useEffect(() => {
+    setCondition(item.condition)
+    setConditionNotes(item.condition_notes)
+    setLocation(item.storage_location || '')
+  }, [item.condition, item.condition_notes, item.storage_location])
+
+  async function saveDetails(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    await onMutate(() => api.updateInventory(item.id, { condition, condition_notes: conditionNotes.trim(), storage_location: location.trim() || null }), 'Component details saved.')
+  }
+
+  async function stockChange(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const saved = await onMutate(() => api.adjustInventory(item.id, { quantity_delta: Number(adjustment), reason: adjustmentReason.trim() }), 'Inventory quantity updated.')
+    if (saved) {
+      setAdjustment('')
+      setAdjustmentReason('')
+    }
+  }
+
+  async function reviewReuse(status: ReuseStatus) {
+    if (await onMutate(() => api.reviewReuse(item.id, { status, reason: reuseReason.trim() }), `Reuse review saved: ${titleCase(status.replaceAll('_', ' '))}.`)) setReuseReason('')
+  }
+
+  async function reviewResale(status: ResaleStatus) {
+    if (await onMutate(() => api.reviewResale(item.id, { status, reason: resaleReason.trim() }), `Resale review saved: ${titleCase(status.replaceAll('_', ' '))}.`)) setResaleReason('')
+  }
+
+  async function moveStock(action: 'reserve' | 'release' | 'use') {
+    const data = { quantity: Number(movementQuantity), reason: movementReason.trim() }
+    const request = action === 'reserve' ? api.reserveInventory(item.id, data)
+      : action === 'release' ? api.releaseInventory(item.id, data) : api.useInventory(item.id, data)
+    const movementLabel = action === 'reserve' ? 'reserved' : action === 'release' ? 'released' : 'marked as used'
+    if (await onMutate(() => request, `${quantityFormatter(data.quantity)} component${data.quantity === 1 ? '' : 's'} ${movementLabel}.`)) setMovementReason('')
+  }
+
+  return (
+    <article className="inventory-record">
+      <header className="inventory-record-head">
+        <div className="inventory-component-mark"><Cpu size={17} /></div>
+        <div className="inventory-record-title"><h3>{item.component_name}</h3><p>{item.model_part_number || 'No part number recorded'} · Case {item.case_id} · {item.source_device}</p></div>
+        <span className={`component-health-status status-${item.health_status}`}>{titleCase(item.health_status.replaceAll('_', ' '))}</span>
+      </header>
+
+      <div className="inventory-facts">
+        <div><span>AVAILABLE</span><strong>{item.quantity_available}</strong></div>
+        <div><span>RESERVED</span><strong>{item.quantity_reserved}</strong></div>
+        <div><span>USED</span><strong>{item.quantity_used}</strong></div>
+        <div><span>PHYSICAL CONDITION</span><strong>{titleCase(item.condition.replaceAll('_', ' '))}</strong></div>
+        <div><span>STORAGE LOCATION</span><strong>{item.storage_location || 'Not specified'}</strong></div>
+      </div>
+
+      <div className="inventory-evidence">
+        <div className="inventory-evidence-heading"><strong>Latest component test</strong>{item.latest_test && <span className={`result-tag result-tag-${item.latest_test.result}`}>{titleCase(item.latest_test.result.replaceAll('_', ' '))}</span>}</div>
+        {item.latest_test ? <><p>{item.latest_test.test_name}: {item.latest_test.observed_result}</p>{item.latest_test.details && <small>{item.latest_test.details}</small>}<time>{dateTimeLabel(item.latest_test.performed_at)}</time></> : <p>No component test evidence is recorded. Health status is Unknown.</p>}
+      </div>
+
+      <div className="inventory-review-grid">
+        <section className="inventory-review-box">
+          <div className="inventory-review-head"><h4>Reuse</h4><span className={`inventory-review-status review-${item.reuse_status}`}>{titleCase(item.reuse_status.replaceAll('_', ' '))}</span></div>
+          {item.reuse_reason && <p className="inventory-review-reason">{item.reuse_reason}{item.reuse_reviewed_at ? ` · ${dateTimeLabel(item.reuse_reviewed_at)}` : ''}</p>}
+          <p className="inventory-policy-note">Reuse approval requires a passing component test and a suitable recorded physical condition. Reservations and use are tracked below.</p>
+          <label>Review reason <textarea required minLength={10} rows={2} value={reuseReason} onChange={(event) => setReuseReason(event.target.value)} placeholder="Describe the evidence and condition reviewed" /></label>
+          <div className="inventory-review-actions"><button className="button button-primary button-sm" onClick={() => void reviewReuse('available')} disabled={busy || !supportsReview || reuseReason.trim().length < 10}>Approve reuse</button><button className="button button-ghost button-sm" onClick={() => void reviewReuse('not_eligible')} disabled={busy || reuseReason.trim().length < 10}>Not eligible</button></div>
+        </section>
+        <section className="inventory-review-box">
+          <div className="inventory-review-head"><h4>Resale review</h4><span className={`inventory-review-status review-${item.resale_status}`}>{titleCase(item.resale_status.replaceAll('_', ' '))}</span></div>
+          {item.resale_reason && <p className="inventory-review-reason">{item.resale_reason}{item.resale_reviewed_at ? ` · ${dateTimeLabel(item.resale_reviewed_at)}` : ''}</p>}
+          <p className="inventory-policy-note">Approval requires current passing test evidence and a suitable recorded condition. This internal review does not verify safety, authenticity, compatibility, or full functionality, and does not list the part for sale.</p>
+          <label>Review reason <textarea required minLength={10} rows={2} value={resaleReason} onChange={(event) => setResaleReason(event.target.value)} placeholder="Describe evidence, condition, and review decision" /></label>
+          <div className="inventory-review-actions"><button className="button button-primary button-sm" onClick={() => void reviewResale('approved_for_resale')} disabled={busy || !supportsReview || item.quantity_available < 1 || resaleReason.trim().length < 10}>Approve for resale</button><button className="button button-ghost button-sm" onClick={() => void reviewResale('not_eligible')} disabled={busy || resaleReason.trim().length < 10}>Not eligible</button><button className="button button-ghost button-sm" onClick={() => void reviewResale('under_review')} disabled={busy || resaleReason.trim().length < 10}>Under review</button></div>
+        </section>
+      </div>
+
+      <details className="inventory-management-details">
+        <summary>Update condition, storage, and stock</summary>
+        <div className="inventory-management-grid">
+          <form onSubmit={saveDetails}>
+            <h4>Physical condition and storage</h4>
+            <label>Physical condition<select value={condition} onChange={(event) => setCondition(event.target.value as ComponentCondition)}><option value="unknown">Unknown / not assessed</option><option value="new">New</option><option value="like_new">Like new</option><option value="good">Good</option><option value="fair">Fair</option><option value="damaged">Damaged</option></select></label>
+            <label>Condition observation<textarea required minLength={3} rows={2} value={conditionNotes} onChange={(event) => setConditionNotes(event.target.value)} /></label>
+            <label>Storage location<input maxLength={180} value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Enter a location (optional)" /></label>
+            <button className="button button-dark button-sm" type="submit" disabled={busy || conditionNotes.trim().length < 3}>Save component details</button>
+          </form>
+          <form onSubmit={stockChange}>
+            <h4>Adjust available quantity</h4>
+            <p>Use a positive number to add stock or a negative number to remove it. Reserved quantities cannot be removed here.</p>
+            <label>Quantity change<input required type="number" min="-100000" max="100000" step="1" value={adjustment} onChange={(event) => setAdjustment(event.target.value)} placeholder="e.g. 2 or -1" /></label>
+            <label>Reason<input required minLength={3} maxLength={500} value={adjustmentReason} onChange={(event) => setAdjustmentReason(event.target.value)} placeholder="Stock count or intake correction" /></label>
+            <button className="button button-dark button-sm" type="submit" disabled={busy || !Number(adjustment) || adjustmentReason.trim().length < 3}>Save quantity change</button>
+          </form>
+          <div className="inventory-movement-form">
+            <h4>Reserve, release, or use stock</h4>
+            <label>Quantity<input required type="number" min="1" max="100000" value={movementQuantity} onChange={(event) => setMovementQuantity(event.target.value)} /></label>
+            <label>Reason<input required minLength={3} maxLength={500} value={movementReason} onChange={(event) => setMovementReason(event.target.value)} placeholder="Repair case or handling note" /></label>
+            <div className="inventory-review-actions"><button className="button button-ghost button-sm" onClick={() => void moveStock('reserve')} disabled={busy || item.reuse_status !== 'available' || Number(movementQuantity) < 1 || movementReason.trim().length < 3}>Reserve</button><button className="button button-ghost button-sm" onClick={() => void moveStock('release')} disabled={busy || item.quantity_reserved < Number(movementQuantity) || Number(movementQuantity) < 1 || movementReason.trim().length < 3}>Release</button><button className="button button-ghost button-sm" onClick={() => void moveStock('use')} disabled={busy || item.quantity_reserved < Number(movementQuantity) || Number(movementQuantity) < 1 || movementReason.trim().length < 3}>Mark used</button></div>
+          </div>
+        </div>
+      </details>
+
+      {!!item.events.length && <details className="inventory-event-details"><summary>Stock activity ({item.events.length})</summary><ul>{item.events.map((event) => <li key={event.id}><strong>{titleCase(event.event_type.replaceAll('_', ' '))} · {event.quantity}</strong><span>{event.reason}</span><time>{dateTimeLabel(event.occurred_at)}</time></li>)}</ul></details>}
+      <p className="inventory-record-timestamps">Created {dateTimeLabel(item.created_at)} · Updated {dateTimeLabel(item.updated_at)}</p>
+    </article>
+  )
+}
+
+function quantityFormatter(value: number) {
+  return new Intl.NumberFormat().format(value)
 }
 
 function KnowledgePage({ sources, notice }: { sources: KnowledgeSource[]; notice?: string }) {

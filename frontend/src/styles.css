@@ -4539,3 +4539,825 @@ body.high-contrast-hud .game-btn {
     gap: 10px 16px;
   }
 }
+
+/* Component health tracker: scoped to the Diagnostics glass workspace. */
+.diagnostics-negative-hud .component-health-panel {
+  padding-bottom: 20px;
+}
+
+.diagnostics-negative-hud .component-health-panel > .section-card-head p {
+  margin: 5px 0 0;
+  color: #69798d;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.diagnostics-negative-hud .component-health-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 20px;
+}
+
+.diagnostics-negative-hud .component-health-item {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid rgba(220, 231, 227, .9);
+  border-radius: 12px;
+  background: rgba(250, 253, 251, .8);
+}
+
+.diagnostics-negative-hud .component-health-heading {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.diagnostics-negative-hud .component-health-icon {
+  display: grid;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid #dcece7;
+  border-radius: 10px;
+  background: #edf8f4;
+  color: #438977;
+}
+
+.diagnostics-negative-hud .component-health-title {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.diagnostics-negative-hud .component-health-title strong {
+  color: #293b50;
+  font-size: 14px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.diagnostics-negative-hud .component-health-title small {
+  color: #7d8c9c;
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.diagnostics-negative-hud .component-health-status {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.diagnostics-negative-hud .component-health-status.status-working {
+  border-color: #d4eee2;
+  background: #eaf8f1;
+  color: #267553;
+}
+
+.diagnostics-negative-hud .component-health-status.status-faulty {
+  border-color: #f3d7d4;
+  background: #fff0ee;
+  color: #ac4e47;
+}
+
+.diagnostics-negative-hud .component-health-status.status-needs_testing {
+  border-color: #f2e5c7;
+  background: #fff8e8;
+  color: #967233;
+}
+
+.diagnostics-negative-hud .component-health-status.status-unknown {
+  border-color: #e0e6eb;
+  background: #f2f5f7;
+  color: #68798b;
+}
+
+.diagnostics-negative-hud .component-test-history {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.diagnostics-negative-hud .component-test-history li {
+  padding: 12px 0 0;
+  border-top: 1px solid rgba(220, 231, 227, .8);
+}
+
+.diagnostics-negative-hud .component-test-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.diagnostics-negative-hud .component-test-heading strong {
+  color: #34465a;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.diagnostics-negative-hud .component-test-history p {
+  margin: 6px 0 0;
+  color: #52647a;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.diagnostics-negative-hud .component-test-history small,
+.diagnostics-negative-hud .component-test-history time {
+  display: block;
+  margin-top: 5px;
+  color: #7b8b9d;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.diagnostics-negative-hud .component-no-evidence {
+  margin: 12px 0 0 47px;
+  color: #738397;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.diagnostics-negative-hud .component-create-form,
+.diagnostics-negative-hud .component-test-form {
+  margin: 16px 20px 0;
+  padding-top: 16px;
+  border-top: 1px solid rgba(220, 231, 227, .85);
+}
+
+.diagnostics-negative-hud .component-health-item .component-test-form {
+  margin: 14px 0 0;
+  padding-top: 13px;
+}
+
+.diagnostics-negative-hud .component-create-grid,
+.diagnostics-negative-hud .component-test-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.diagnostics-negative-hud .component-create-grid label,
+.diagnostics-negative-hud .component-test-grid label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+  color: #55677d;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.diagnostics-negative-hud .component-test-observation,
+.diagnostics-negative-hud .component-test-notes {
+  grid-column: 1 / -1;
+}
+
+.diagnostics-negative-hud .component-create-grid input,
+.diagnostics-negative-hud .component-test-grid input,
+.diagnostics-negative-hud .component-test-grid select,
+.diagnostics-negative-hud .component-test-grid textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #dce4ed;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .88);
+  color: #38495f;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.diagnostics-negative-hud .component-test-grid textarea {
+  min-height: 78px;
+  resize: vertical;
+}
+
+.diagnostics-negative-hud .component-create-grid input:focus,
+.diagnostics-negative-hud .component-test-grid input:focus,
+.diagnostics-negative-hud .component-test-grid select:focus,
+.diagnostics-negative-hud .component-test-grid textarea:focus {
+  outline: none;
+  border-color: #38bdf8;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, .12);
+}
+
+.diagnostics-negative-hud .component-health-note {
+  margin: 10px 0 0;
+  color: #75859a;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.diagnostics-negative-hud .component-health-empty {
+  margin: 0 20px;
+  padding: 16px;
+  border: 1px dashed rgba(125, 151, 143, .32);
+  border-radius: 10px;
+}
+
+@media (max-width: 640px) {
+  .diagnostics-negative-hud .component-health-list {
+    padding: 0 14px;
+  }
+
+  .diagnostics-negative-hud .component-health-item {
+    padding: 13px;
+  }
+
+  .diagnostics-negative-hud .component-create-form {
+    margin-right: 14px;
+    margin-left: 14px;
+  }
+
+  .diagnostics-negative-hud .component-create-grid,
+  .diagnostics-negative-hud .component-test-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .diagnostics-negative-hud .component-test-observation,
+  .diagnostics-negative-hud .component-test-notes {
+    grid-column: auto;
+  }
+
+  .diagnostics-negative-hud .component-health-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .diagnostics-negative-hud .component-health-status {
+    margin-left: 47px;
+  }
+
+  .diagnostics-negative-hud .component-health-empty {
+    margin: 0 14px;
+  }
+}
+
+/* Parts inventory page: reuse the existing ivory glass surfaces and tokens. */
+.inventory-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.inventory-page .inventory-page-heading {
+  margin-bottom: 0;
+}
+
+.inventory-page-heading .page-subtitle {
+  margin: 5px 0 0;
+  color: #708095;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.inventory-total-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 13px;
+  border: 1px solid rgba(255, 255, 255, .86);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .7);
+  color: #4b7d6f;
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.inventory-page .inventory-feedback {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.inventory-page .inventory-feedback button {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.inventory-page .inventory-success { border-color: #d7eee4; background: rgba(238, 250, 244, .92); color: #2e765b; }
+.inventory-page .inventory-error { border-color: #f1d8d5; background: rgba(255, 243, 241, .94); color: #a84c46; }
+
+.inventory-page .inventory-intake-card,
+.inventory-page .inventory-list-card {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .88);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .76);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  box-shadow: 0 12px 32px rgba(18, 32, 54, .05);
+}
+
+.inventory-page .inventory-intake-card .section-card-head p {
+  margin: 4px 0 0;
+  color: #718095;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.inventory-intake-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 0 20px 20px;
+}
+
+.inventory-intake-form label,
+.inventory-management-grid label,
+.inventory-review-box label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+  color: #55677d;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.inventory-intake-form label:first-child,
+.inventory-intake-form .inventory-location-field,
+.inventory-intake-form .inventory-intake-action,
+.inventory-intake-form .inventory-policy-note {
+  grid-column: 1 / -1;
+}
+
+.inventory-page .inventory-intake-form input,
+.inventory-page .inventory-intake-form select,
+.inventory-page .inventory-management-grid input,
+.inventory-page .inventory-management-grid select,
+.inventory-page .inventory-management-grid textarea,
+.inventory-page .inventory-review-box textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid #dce4ed;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .88);
+  color: #38495f;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.inventory-page .inventory-management-grid textarea,
+.inventory-page .inventory-review-box textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+
+.inventory-page .inventory-intake-form input:focus,
+.inventory-page .inventory-intake-form select:focus,
+.inventory-page .inventory-management-grid input:focus,
+.inventory-page .inventory-management-grid select:focus,
+.inventory-page .inventory-management-grid textarea:focus,
+.inventory-page .inventory-review-box textarea:focus {
+  outline: none;
+  border-color: #91cbbc;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(64, 214, 176, .12);
+}
+
+.inventory-intake-action { display: flex; justify-content: flex-end; }
+.inventory-policy-note { margin: 0; color: #748397; font-size: 11px; line-height: 1.5; }
+.inventory-candidate-empty { margin: 0 20px 20px; border: 1px dashed #dfe8e4; border-radius: 10px; }
+
+.inventory-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(226, 232, 240, .7);
+}
+
+.inventory-search { flex: 1 1 280px; width: auto; min-width: 180px; margin: 0; }
+.inventory-filter { display: flex; align-items: center; gap: 7px; color: #758398; font-size: 11px; font-weight: 700; }
+.inventory-filter select { max-width: 145px; min-height: 36px; padding: 7px 9px; border: 1px solid #e0e7ee; border-radius: 8px; background: rgba(255,255,255,.82); color: #526379; font: inherit; font-size: 11px; }
+.inventory-state { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 130px; color: #718095; font-size: 12px; }
+.inventory-record-list { display: flex; flex-direction: column; gap: 14px; padding: 16px; }
+
+.inventory-record {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid rgba(224, 233, 229, .9);
+  border-radius: 13px;
+  background: rgba(252, 254, 253, .82);
+}
+
+.inventory-record-head { display: flex; align-items: center; gap: 11px; }
+.inventory-component-mark { display: grid; flex: 0 0 38px; width: 38px; height: 38px; place-items: center; border: 1px solid #dcece7; border-radius: 10px; background: #edf8f4; color: #438977; }
+.inventory-record-title { flex: 1; min-width: 0; }
+.inventory-record-title h3 { margin: 0; color: #293b50; font-size: 16px; line-height: 1.35; overflow-wrap: anywhere; }
+.inventory-record-title p { margin: 4px 0 0; color: #748397; font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+.inventory-page .component-health-status { flex: 0 0 auto; padding: 5px 9px; border: 1px solid transparent; border-radius: 999px; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.inventory-page .component-health-status.status-working { border-color: #d4eee2; background: #eaf8f1; color: #267553; }
+.inventory-page .component-health-status.status-faulty { border-color: #f3d7d4; background: #fff0ee; color: #ac4e47; }
+.inventory-page .component-health-status.status-needs_testing { border-color: #f2e5c7; background: #fff8e8; color: #967233; }
+.inventory-page .component-health-status.status-unknown { border-color: #e0e6eb; background: #f2f5f7; color: #68798b; }
+
+.inventory-facts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; margin-top: 16px; }
+.inventory-facts > div { display: flex; min-width: 0; flex-direction: column; gap: 5px; padding: 10px; border: 1px solid #edf1f3; border-radius: 9px; background: rgba(255,255,255,.66); }
+.inventory-facts span { color: #8794a4; font-size: 9px; font-weight: 800; letter-spacing: .55px; }
+.inventory-facts strong { color: #394b60; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+
+.inventory-evidence { margin-top: 14px; padding: 13px 14px; border: 1px solid #e7eee9; border-radius: 10px; background: rgba(247, 251, 249, .8); }
+.inventory-evidence-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.inventory-evidence-heading strong { color: #42556a; font-size: 12px; }
+.inventory-evidence p { margin: 7px 0 0; color: #596b80; font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+.inventory-evidence small,.inventory-evidence time { display: block; margin-top: 5px; color: #7a899b; font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
+
+.inventory-review-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.inventory-review-box { min-width: 0; padding: 14px; border: 1px solid #e8eeeb; border-radius: 11px; background: rgba(255,255,255,.66); }
+.inventory-review-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.inventory-review-head h4,.inventory-management-grid h4 { margin: 0; color: #34465b; font-size: 13px; }
+.inventory-review-status { padding: 4px 8px; border: 1px solid #e1e7eb; border-radius: 99px; background: #f2f5f7; color: #65768a; font-size: 10px; font-weight: 800; }
+.inventory-review-status.review-available,.inventory-review-status.review-approved_for_resale { border-color: #d4eee2; background: #eaf8f1; color: #267553; }
+.inventory-review-status.review-not_eligible { border-color: #f1d8d5; background: #fff1ef; color: #a84c46; }
+.inventory-review-reason { margin: 8px 0; color: #50647a; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.inventory-review-box .inventory-policy-note { margin: 9px 0; }
+.inventory-review-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.inventory-review-box .inventory-review-actions .button { min-height: 34px; }
+
+.inventory-management-details,.inventory-event-details { margin-top: 13px; border-top: 1px solid #e8eeeb; padding-top: 12px; }
+.inventory-management-details > summary,.inventory-event-details > summary { color: #50647a; font-size: 12px; font-weight: 750; cursor: pointer; }
+.inventory-management-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; margin-top: 13px; }
+.inventory-management-grid > form,.inventory-movement-form { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 10px; padding: 13px; border: 1px solid #e9efec; border-radius: 10px; background: rgba(255,255,255,.7); }
+.inventory-management-grid > form label,.inventory-movement-form label { width: 100%; }
+.inventory-management-grid > form p { margin: 0; color: #718095; font-size: 11px; line-height: 1.5; }
+.inventory-event-details ul { display: grid; gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
+.inventory-event-details li { display: grid; grid-template-columns: minmax(130px,auto) 1fr auto; align-items: start; gap: 10px; padding: 8px 0; border-top: 1px solid #edf1ef; color: #718095; font-size: 10px; line-height: 1.45; }
+.inventory-event-details li strong { color: #44576c; }
+.inventory-event-details li time { white-space: nowrap; }
+.inventory-record-timestamps { margin: 12px 0 0; color: #8492a3; font-size: 10px; }
+
+@media (max-width: 900px) {
+  .inventory-management-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .inventory-facts { grid-template-columns: repeat(3, minmax(0,1fr)); }
+}
+
+@media (max-width: 640px) {
+  .inventory-page { gap: 15px; }
+  .inventory-page .page-heading { align-items: flex-start; flex-direction: column; }
+  .inventory-intake-form { grid-template-columns: minmax(0,1fr); padding: 0 14px 16px; }
+  .inventory-intake-form label:first-child,.inventory-intake-form .inventory-location-field,.inventory-intake-form .inventory-intake-action,.inventory-intake-form .inventory-policy-note { grid-column: auto; }
+  .inventory-toolbar { align-items: stretch; }
+  .inventory-search { flex-basis: 100%; }
+  .inventory-filter { flex: 1 1 120px; justify-content: space-between; }
+  .inventory-filter select { flex: 1; max-width: none; }
+  .inventory-toolbar > .button { flex: 1 1 100%; justify-content: center; }
+  .inventory-record-list { padding: 11px; }
+  .inventory-record { padding: 13px; }
+  .inventory-record-head { align-items: flex-start; flex-wrap: wrap; }
+  .inventory-page .component-health-status { margin-left: 49px; }
+  .inventory-facts { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .inventory-review-grid,.inventory-management-grid { grid-template-columns: minmax(0,1fr); }
+  .inventory-review-actions > .button { flex: 1 1 auto; justify-content: center; }
+  .inventory-event-details li { grid-template-columns: 1fr; gap: 3px; }
+}
+
+@media (max-width: 480px) {
+  .mac-dock.glass-dock { max-width: calc(100vw - 18px); gap: 5px; overflow-x: auto; padding: 8px 10px; }
+  .mac-dock.glass-dock .dock-item { flex: 0 0 36px; width: 36px; height: 40px; }
+  .mac-dock.glass-dock .dock-item svg { width: 19px; height: 19px; }
+}
+
+/* Cross-page content polish. Keep page background artwork and effect layers untouched. */
+.page-content,
+.overview-negative-hud,
+.queue-negative-hud,
+.diagnostics-negative-hud {
+  min-width: 0;
+}
+
+.page-content .page-heading h1 {
+  line-height: 1.15;
+}
+
+.page-content .page-heading > :last-child {
+  min-width: 0;
+}
+
+.page-content .section-card-head {
+  padding: 18px 22px;
+}
+
+.page-content .section-card-head h3 {
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.page-content .section-card-head p {
+  margin: 4px 0 0;
+  color: #69798d;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.page-content .button,
+.queue-negative-hud .button,
+.diagnostics-negative-hud .button {
+  min-height: 40px;
+  font-size: 12px;
+}
+
+.queue-negative-hud .queue-header-row,
+.diagnostics-negative-hud .diagnostics-header-row {
+  min-width: 0;
+}
+
+.queue-negative-hud .queue-title,
+.diagnostics-negative-hud .diagnostics-title {
+  line-height: 1.15;
+}
+
+.queue-negative-hud .queue-card,
+.diagnostics-negative-hud .surface-card,
+.page-content .surface-card {
+  border-radius: 16px;
+}
+
+.queue-negative-hud .queue-toolbar {
+  align-items: center;
+}
+
+.queue-negative-hud .search-box,
+.queue-negative-hud .filter-controls,
+.diagnostics-negative-hud .diagnostic-select-bar {
+  min-width: 0;
+}
+
+.queue-negative-hud .queue-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.queue-negative-hud .data-table {
+  min-width: 780px;
+}
+
+.overview-negative-hud .overview-support-card,
+.overview-negative-hud .overview-glass-attention {
+  border-radius: 16px;
+}
+
+.overview-negative-hud .overview-glass-card {
+  min-width: 0;
+  min-height: 158px;
+}
+
+.overview-negative-hud .overview-hud-header,
+.queue-negative-hud .queue-hud-header,
+.diagnostics-negative-hud .diagnostics-hud-header {
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, .78);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .64);
+  box-shadow: 0 8px 22px rgba(19, 34, 51, .045), inset 0 1px 0 rgba(255, 255, 255, .8);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+.overview-negative-hud .glass-signal-item {
+  align-items: flex-start;
+}
+
+.overview-negative-hud .signal-item-copy,
+.overview-negative-hud .signal-item-state {
+  min-width: 0;
+}
+
+.overview-negative-hud .signal-item-state {
+  flex-wrap: wrap;
+}
+
+.overview-negative-hud .signal-item-description {
+  overflow-wrap: anywhere;
+}
+
+.diagnostics-negative-hud .diagnostics-subnav {
+  max-width: 100%;
+}
+
+.diagnostics-negative-hud .case-picker,
+.diagnostics-negative-hud .case-picker select {
+  min-width: 0;
+}
+
+.diagnostics-negative-hud .evidence-copy,
+.diagnostics-negative-hud .recommendation-summary,
+.diagnostics-negative-hud .hypothesis-detail,
+.diagnostics-negative-hud .next-check-body,
+.diagnostics-negative-hud .source-reference {
+  overflow-wrap: anywhere;
+}
+
+.diagnostics-negative-hud .component-create-grid input,
+.diagnostics-negative-hud .component-test-grid input,
+.diagnostics-negative-hud .component-test-grid select,
+.diagnostics-negative-hud .component-test-grid textarea,
+.diagnostics-negative-hud .form-grid input,
+.diagnostics-negative-hud .form-grid select,
+.diagnostics-negative-hud .form-grid textarea,
+.diagnostics-negative-hud .outcome-form input,
+.diagnostics-negative-hud .outcome-form select,
+.diagnostics-negative-hud .outcome-form textarea {
+  border-radius: 10px;
+}
+
+.page-content .memory-record,
+.page-content .knowledge-card,
+.inventory-page .inventory-record {
+  transition: border-color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+
+.page-content .memory-record:hover,
+.page-content .knowledge-card:hover,
+.inventory-page .inventory-record:hover {
+  border-color: rgba(64, 160, 132, .28);
+  box-shadow: 0 8px 22px rgba(23, 48, 65, .055);
+}
+
+.page-content .memory-record:focus-visible,
+.overview-negative-hud .overview-glass-card:focus-visible,
+.overview-negative-hud .overview-activity-row:focus-visible,
+.overview-negative-hud .overview-pending-row:focus-visible {
+  outline: 3px solid rgba(22, 124, 104, .32);
+  outline-offset: 2px;
+}
+
+.page-content .memory-search input,
+.inventory-page .inventory-toolbar select {
+  min-height: 40px;
+}
+
+.page-content .knowledge-content {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .inventory-page .inventory-intake-form {
+    gap: 12px;
+  }
+
+  .inventory-page .inventory-record-head {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
+  .overview-negative-hud .overview-glass-card {
+    min-height: 142px;
+  }
+
+  .overview-negative-hud .glass-signal-item {
+    align-items: flex-start;
+  }
+
+  .overview-negative-hud .signal-item-state {
+    flex: 1 1 100%;
+    margin-left: 15px;
+  }
+
+  .overview-negative-hud .overview-action-button {
+    margin-left: auto;
+  }
+
+  .overview-negative-hud .overview-support-card,
+  .overview-negative-hud .overview-glass-attention {
+    padding: 16px;
+  }
+
+  .diagnostics-negative-hud .diagnostics-subnav {
+    width: 100%;
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+
+  .diagnostics-negative-hud .diagnostics-tab-btn {
+    flex: 1 1 140px;
+    justify-content: center;
+    padding: 9px 10px;
+    text-align: center;
+    white-space: normal;
+  }
+}
+
+@media (max-width: 900px) {
+  .overview-fullscreen-wrap,
+  .queue-fullscreen-wrap,
+  .diagnostics-fullscreen-wrap {
+    overflow-x: clip;
+  }
+}
+
+@media (max-width: 520px) {
+  .page-content {
+    padding: 22px 14px 30px;
+  }
+
+  .page-content .page-heading h1 {
+    font-size: 28px;
+  }
+
+  .page-content .section-card-head {
+    padding: 16px;
+  }
+
+  .overview-negative-hud .overview-activity-row time {
+    white-space: normal;
+  }
+
+  .inventory-page .inventory-record-head {
+    gap: 9px;
+  }
+
+  .inventory-page .inventory-record-title {
+    flex: 1 1 calc(100% - 52px);
+  }
+}
+
+@media (max-width: 480px) {
+  .mac-dock.glass-dock {
+    justify-content: center;
+    gap: clamp(2px, 0.7vw, 4px);
+    padding: 7px 8px;
+    overflow: visible;
+  }
+
+  .mac-dock.glass-dock .dock-item {
+    flex: 0 1 34px;
+    width: 34px;
+    height: 40px;
+  }
+
+  .mac-dock.glass-dock .dock-divider {
+    flex: 0 0 1px;
+    margin-right: 2px;
+    margin-left: 2px;
+  }
+}
+
+@media (max-width: 360px) {
+  .mac-dock.glass-dock {
+    gap: 2px;
+    padding: 6px 7px;
+  }
+
+  .mac-dock.glass-dock .dock-item {
+    flex-basis: 29px;
+    width: 29px;
+  }
+
+  .mac-dock.glass-dock .dock-item svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-content .memory-record,
+  .page-content .knowledge-card,
+  .inventory-page .inventory-record,
+  .queue-negative-hud .button,
+  .diagnostics-negative-hud .button {
+    transition: none;
+  }
+}
