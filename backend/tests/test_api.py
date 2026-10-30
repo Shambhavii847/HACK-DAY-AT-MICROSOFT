@@ -52,6 +52,22 @@ def test_health_discloses_inference_mode():
         assert data["inference_mode"] in {"gemini_api", "rule_based_fallback"}
 
 
+def test_dashboard_workload_counts_are_derived_once_per_case():
+    with TestClient(app) as client:
+        cases = client.get("/api/cases").json()
+        tracked = [case for case in cases if case["data_origin"] != "demo"]
+        dashboard = client.get("/api/dashboard")
+        assert dashboard.status_code == 200
+        data = dashboard.json()
+        assert data["total_cases"] == len(tracked)
+        assert data["pending_repairs"] == sum(case["status"] in {"new", "diagnosing", "waiting_parts", "on_hold"} for case in tracked)
+        assert data["in_progress"] == sum(case["status"] in {"in_repair", "testing"} for case in tracked)
+        assert data["completed_repairs"] == sum(case["status"] == "completed" for case in tracked)
+        assert data["awaiting_diagnosis"] == sum(case["status"] in {"new", "diagnosing"} for case in tracked)
+        assert data["total_cases"] == 0  # The seeded sample rows are explicitly marked as demo data.
+        assert len({action["case_id"] for action in data["pending_actions"]}) == len(data["pending_actions"])
+
+
 def test_demo_cases_are_explicitly_marked():
     with TestClient(app) as client:
         response = client.get("/api/cases")
@@ -116,6 +132,12 @@ def test_create_case_add_test_and_recommendation():
         persisted = client.get(f"/api/cases/{case_id}")
         assert persisted.status_code == 200
         assert {item["id"] for item in persisted.json()["tests"]} == {test.json()["id"], second.json()["id"]}
+        assert persisted.json()["evidence_outdated"] is True
+        dashboard = client.get("/api/dashboard").json()
+        assert dashboard["evidence_to_review"] == sum(
+            item["evidence_outdated"] for item in client.get("/api/cases").json() if item["data_origin"] != "demo"
+        )
+        assert any(action["case_id"] == case_id and action["title"] == "Review new evidence" for action in dashboard["pending_actions"])
 
         regenerated = client.post(f"/api/cases/{case_id}/recommendation")
         assert regenerated.status_code == 200, regenerated.text
@@ -123,6 +145,7 @@ def test_create_case_add_test_and_recommendation():
         assert regenerated_data["content"]["evidence_test_ids"] == sorted([test.json()["id"], second.json()["id"]])
         assert regenerated_data["content"]["new_evidence_test_ids"] == [second.json()["id"]]
         assert regenerated_data["content"]["previous_recommendation_id"] == data["id"]
+        assert client.get(f"/api/cases/{case_id}").json()["evidence_outdated"] is False
 
         other_case = client.post("/api/cases", json={
             "device_category": "Laptop",
@@ -208,3 +231,95 @@ def test_delete_case():
 
         get_resp = client.get(f"/api/cases/{case_id}")
         assert get_resp.status_code == 404
+
+
+def test_timeline_uses_saved_records_and_tracks_future_status_changes():
+    with TestClient(app) as client:
+        created = client.post("/api/cases", json={
+            "device_category": "Laptop", "brand": "TimelineBrand", "model": "Timeline 1",
+            "issue_title": "Laptop will not start", "symptoms": "The power indicator remains off.", "priority": "normal",
+        })
+        assert created.status_code == 201
+        case_id = created.json()["id"]
+        initial = client.get(f"/api/cases/{case_id}").json()["timeline"]
+        assert [item["event_type"] for item in initial] == ["case_created", "symptoms_recorded"]
+
+        assert client.patch(f"/api/cases/{case_id}", json={"status": "diagnosing"}).status_code == 200
+        assert client.patch(f"/api/cases/{case_id}", json={"status": "diagnosing"}).status_code == 200
+        test = client.post(f"/api/cases/{case_id}/tests", json={
+            "test_name": "External power check", "result": "inconclusive",
+            "observed_result": "No indicator was observed during this check.", "details": "Adapter model not recorded.",
+        })
+        assert test.status_code == 201
+        recommendation = client.post(f"/api/cases/{case_id}/recommendation")
+        assert recommendation.status_code == 200
+        timeline = client.get(f"/api/cases/{case_id}").json()["timeline"]
+        types = [item["event_type"] for item in timeline]
+        assert types.count("status_changed") == 1
+        assert "diagnostic_test" in types
+        assert "recommendation_generated" in types
+        assert timeline == sorted(timeline, key=lambda item: (item["happened_at"], item["id"]))
+        test_event = next(item for item in timeline if item["event_type"] == "diagnostic_test")
+        assert test.json()["observed_result"] in test_event["description"]
+
+
+def test_similar_memory_is_explainable_and_not_a_current_diagnosis():
+    with TestClient(app) as client:
+        previous = client.post("/api/cases", json={
+            "device_category": "Laptop", "brand": "MemoryBrand", "model": "M1",
+            "issue_title": "Laptop will not charge", "symptoms": "Charging indicator remains off with the original adapter.", "priority": "normal",
+        })
+        assert previous.status_code == 201
+        previous_id = previous.json()["id"]
+        assert client.post(f"/api/cases/{previous_id}/tests", json={
+            "test_name": "Known-good adapter comparison", "result": "pass",
+            "observed_result": "Indicator appeared using the comparison adapter.", "details": "Single variable changed.",
+        }).status_code == 201
+        assert client.post(f"/api/cases/{previous_id}/outcome", json={
+            "confirmed_fault": "Original adapter fault confirmed by technician",
+            "repair_action": "Adapter replaced after approval", "outcome": "Charging verified with replacement.", "status": "completed",
+        }).status_code == 200
+
+        current = client.post("/api/cases", json={
+            "device_category": "Laptop", "brand": "MemoryBrand", "model": "M2",
+            "issue_title": "Laptop will not charge", "symptoms": "Charging indicator remains off with this adapter.", "priority": "normal",
+        })
+        matches = client.get(f"/api/cases/{current.json()['id']}").json()["similar_cases"]
+        match = next(item for item in matches if item["id"] == previous_id)
+        assert match["status"] == "completed"
+        assert match["tests"][0]["test_name"] == "Known-good adapter comparison"
+        assert match["match_reasons"]
+        assert "not a diagnosis" in match["disclaimer"].lower()
+        assert match["id"] != current.json()["id"]
+
+
+def test_safety_alerts_only_follow_non_negated_recorded_conditions():
+    with TestClient(app) as client:
+        safe = client.post("/api/cases", json={
+            "device_category": "Laptop", "brand": "SafetyBrand", "model": "Safe",
+            "issue_title": "No charging issue", "symptoms": "No unusual heat, no battery swelling, and no smoke were observed.", "priority": "normal",
+        })
+        assert client.get(f"/api/cases/{safe.json()['id']}").json()["safety_alerts"] == []
+
+        hazard = client.post("/api/cases", json={
+            "device_category": "Laptop", "brand": "SafetyBrand", "model": "Alert",
+            "issue_title": "Battery swelling reported", "symptoms": "Technician observed battery swelling and unusual heat.", "priority": "urgent",
+        })
+        detail = client.get(f"/api/cases/{hazard.json()['id']}").json()
+        assert {alert["title"] for alert in detail["safety_alerts"]} == {"Possible battery swelling", "Possible overheating"}
+        assert all("not a confirmed" in alert["disclaimer"].lower() for alert in detail["safety_alerts"])
+
+
+def test_detail_contains_actual_report_fields_without_fabricated_outcome():
+    with TestClient(app) as client:
+        created = client.post("/api/cases", json={
+            "device_category": "Tablet", "brand": "ReportBrand", "model": "R-10",
+            "issue_title": "Screen flickers", "symptoms": "Display flickers after waking.", "priority": "normal",
+        })
+        detail = client.get(f"/api/cases/{created.json()['id']}").json()
+        assert detail["brand"] == "ReportBrand"
+        assert detail["symptoms"] == "Display flickers after waking."
+        assert detail["confirmed_fault"] is None
+        assert detail["repair_action"] is None
+        assert detail["outcome"] is None
+        assert detail["tests"] == []

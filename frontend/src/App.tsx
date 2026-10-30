@@ -6,13 +6,13 @@ import {
   Cpu, ExternalLink, Eye, Filter, Github, History, House, Info, Layers3, Linkedin,
   LoaderCircle, Mail, Phone, Plus, RefreshCw, RotateCcw, Search,
   Settings, ShieldCheck, Smartphone, Sparkles, Stethoscope, Trash2,
-  Volume2, VolumeX, X, Zap,
+  Volume2, VolumeX, X, Zap, Printer,
   ClipboardCheck, PackageSearch, BrainCircuit,
 } from 'lucide-react'
 import { api } from './lib/api'
 import type {
   CaseDetail, CaseStatus, DashboardSummary, Health, KnowledgeSource,
-  NextCheck, Priority, Recommendation, RepairCase, TestResult, TestStatus,
+  NextCheck, Priority, Recommendation, RepairCase, SafetyAlert, SimilarRepair, TestResult, TestStatus, TimelineEvent,
 } from './lib/types'
 
 const navItems = [
@@ -1463,7 +1463,12 @@ export default function App() {
         `${item.id} ${item.brand} ${item.model} ${item.issue_title} ${item.symptoms} ${item.customer_contact || ''}`
           .toLowerCase()
           .includes(query.toLowerCase())
-      const matchesStatus = caseStatusFilter === 'all' || item.status === caseStatusFilter
+      const matchesStatus = caseStatusFilter === 'all'
+        || item.status === caseStatusFilter
+        || (caseStatusFilter === 'pending' && ['new', 'diagnosing', 'waiting_parts', 'on_hold'].includes(item.status))
+        || (caseStatusFilter === 'in_progress' && ['in_repair', 'testing'].includes(item.status))
+        || (caseStatusFilter === 'awaiting_diagnosis' && ['new', 'diagnosing'].includes(item.status))
+        || (caseStatusFilter === 'evidence_to_review' && item.data_origin !== 'demo' && item.evidence_outdated)
       const matchesPriority = casePriorityFilter === 'all' || item.priority === casePriorityFilter
       return matchesQuery && matchesStatus && matchesPriority
     })
@@ -1485,9 +1490,9 @@ export default function App() {
   }, [cases, memoryQuery])
 
   const selected = selectedDetail?.id === selectedId ? selectedDetail : null
-  const evidenceSnapshot = recommendation?.content.evidence_test_ids
+  const visibleRecommendation = recommendation?.case_id === selected?.id ? recommendation : null
   const staleRecommendation = Boolean(
-    recommendation && selected && selected.tests.some((test) => !evidenceSnapshot?.includes(test.id))
+    visibleRecommendation && selected && selected.tests.some((test) => !visibleRecommendation.content.evidence_test_ids?.includes(test.id))
   )
 
   const aiActive = Boolean(health?.model_configured)
@@ -1587,8 +1592,9 @@ export default function App() {
               dashboard={dashboard}
               cases={cases}
               onOpen={openCase}
-              onNavigate={(tab) => {
+              onNavigate={(tab, filter) => {
                 playUiSound('click', settings)
+                if (filter) setCaseStatusFilter(filter)
                 setActiveNav(tab)
               }}
               settings={settings}
@@ -1626,7 +1632,7 @@ export default function App() {
               cases={activeQueueCases.length ? activeQueueCases : cases}
               diagnosticsTab={diagnosticsTab}
               setDiagnosticsTab={setDiagnosticsTab}
-              recommendation={recommendation}
+              recommendation={visibleRecommendation}
               health={health}
               stale={staleRecommendation}
               generating={generating}
@@ -1798,15 +1804,16 @@ function OverviewPage({
   dashboard: DashboardSummary | null
   cases: RepairCase[]
   onOpen: (id: string, tab?: NavId) => void
-  onNavigate: (tab: NavId) => void
+  onNavigate: (tab: NavId, filter?: string) => void
   settings: AppSettings
   aiActive?: boolean
 }) {
-  const urgent = cases.filter(
+  const userCases = cases.filter((item) => item.data_origin !== 'demo')
+  const urgent = userCases.filter(
     (item) => (item.priority === 'urgent' || item.priority === 'high') && item.status !== 'completed'
   )
-  const activeCases = cases.filter((item) => item.status !== 'completed')
-  const recurringIssues = Object.values(cases.reduce<Record<string, RepairCase[]>>((groups, item) => {
+  const activeCases = userCases.filter((item) => item.status !== 'completed')
+  const recurringIssues = Object.values(userCases.reduce<Record<string, RepairCase[]>>((groups, item) => {
     const key = item.issue_title.trim().toLowerCase()
     groups[key] = [...(groups[key] || []), item]
     return groups
@@ -1819,7 +1826,8 @@ function OverviewPage({
     const score = (item: RepairCase) => (item.priority === 'urgent' ? 4 : item.priority === 'high' ? 3 : item.priority === 'normal' ? 2 : 1) + Math.min(3, Math.max(0, (Date.now() - new Date(item.updated_at).getTime()) / 86400000 / 3))
     return score(b) - score(a)
   }).slice(0, 2)
-  const recentActivity = [...cases].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()).slice(0, 4)
+  const recentActivity = [...userCases].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()).slice(0, 4)
+  const pendingActions = (dashboard?.pending_actions || []).filter((action) => userCases.some((item) => item.id === action.case_id))
   const value = (number: number | undefined) => dashboard ? number ?? 0 : '—'
 
   return (
@@ -1894,6 +1902,22 @@ function OverviewPage({
           ))}
         </div>
 
+        <div className="overview-workload-strip" aria-label="Repair workload">
+          {[
+            { label: 'Total repairs', value: dashboard?.total_cases, filter: 'all' },
+            { label: 'Pending', value: dashboard?.pending_repairs, filter: 'pending' },
+            { label: 'In progress', value: dashboard?.in_progress, filter: 'in_progress' },
+            { label: 'Completed', value: dashboard?.completed_repairs, filter: 'all', tab: 'memory' as NavId },
+            { label: 'Awaiting diagnosis', value: dashboard?.awaiting_diagnosis, filter: 'awaiting_diagnosis' },
+            { label: 'Evidence to review', value: dashboard?.evidence_to_review, filter: 'evidence_to_review' },
+          ].map((item) => (
+            <button key={item.label} className="workload-stat" onClick={() => onNavigate(item.tab || 'cases', item.filter)}>
+              <strong>{item.value ?? '—'}</strong><span>{item.label}</span>
+            </button>
+          ))}
+        </div>
+        <p className="overview-data-note">Workload totals and insights use user-entered repairs. Demo samples remain available and marked in the repair queue.</p>
+
         <section className="overview-glass-attention">
           <div className="glass-attention-head">
             <div className="glass-attention-title"><span className="attention-indicator"><AlertTriangle size={16} /></span><div><h3>Attention needed</h3><p className="overview-section-note">High and urgent active cases</p></div></div>
@@ -1913,12 +1937,22 @@ function OverviewPage({
               </article>
             ))}
           </div> : <div className="glass-calm-state"><div className="calm-icon-wrap"><CheckCircle2 size={17} /></div><div className="calm-text-wrap"><strong>No high or urgent cases in the queue</strong><small>Priority insights will appear here when cases need attention.</small></div></div>}
+          <div className="overview-pending-actions">
+            <div className="overview-pending-heading"><h3>Pending actions</h3><span>{pendingActions.length}</span></div>
+            {pendingActions.length ? pendingActions.map((action) => (
+              <button className="overview-pending-row" key={`${action.case_id}-${action.title}`} onClick={() => onOpen(action.case_id, 'diagnostics')}>
+                <span className="pending-action-icon"><AlertCircle size={14} /></span>
+                <span><strong>{action.title} · {action.case_id}</strong><small>{action.detail}</small></span>
+                <ChevronRight size={15} />
+              </button>
+            )) : <p className="overview-empty-copy">No pending follow-up actions are recorded for user-entered repairs.</p>}
+          </div>
         </section>
 
         <div className="overview-support-grid">
           <section className="overview-support-card">
             <div className="overview-support-heading"><span className="support-icon insight-icon"><BrainCircuit size={17} /></span><div><h2>AI Repair Insights</h2><p>Record based patterns and queue signals for technician review.</p></div></div>
-            {cases.length === 0 ? <p className="overview-empty-copy">Add repair cases to surface recurring issues, bottlenecks, and priority suggestions.</p> : <div className="overview-insight-list">
+            {userCases.length === 0 ? <p className="overview-empty-copy">User-entered repair records will surface recurring issues, bottlenecks, and priorities here.</p> : <div className="overview-insight-list">
               {recurringIssues.length > 0 && <div className="overview-insight"><span className="insight-mark">↻</span><div><strong>Recurring issue · {recurringIssues[0][0].issue_title}</strong><p>Appears in {recurringIssues[0].length} available cases. Review their test evidence for shared patterns.</p></div></div>}
               {bottlenecks.slice(0, 1).map((item) => <div className="overview-insight" key={`b-${item.id}`}><span className="insight-mark bottleneck-mark"><Clock3 size={15} /></span><div><strong>Waiting case · {item.id}</strong><p>{item.status === 'waiting_parts' ? 'Waiting for parts' : item.status === 'on_hold' ? 'On hold' : 'No update for at least 3 days'} · last updated {dateLabel(item.updated_at)}.</p></div></div>)}
               {suggested.length > 0 && <div className="overview-insight"><span className="insight-mark priority-mark"><Zap size={15} /></span><div><strong>Suggested priority · {suggested[0].id}</strong><p>{priorityNames[suggested[0].priority]} priority, {Math.max(0, Math.floor((Date.now() - new Date(suggested[0].updated_at).getTime()) / 86400000))} days since update. Review urgency and case evidence.</p></div></div>}
@@ -1926,7 +1960,7 @@ function OverviewPage({
             </div>}
           </section>
           <section className="overview-support-card">
-            <div className="overview-support-heading"><span className="support-icon activity-icon"><Activity size={17} /></span><div><h2>Recent Activity</h2><p>Latest case changes from the repair queue.</p></div></div>
+            <div className="overview-support-heading"><span className="support-icon activity-icon"><Activity size={17} /></span><div><h2>Recent Activity</h2><p>Latest changes from user-entered repair cases.</p></div></div>
             {recentActivity.length ? <div className="overview-activity-list">{recentActivity.map((item) => {
               const created = Math.abs(new Date(item.updated_at).getTime() - new Date(item.created_at).getTime()) < 1000
               return <button key={item.id} className="overview-activity-row" onClick={() => onOpen(item.id, 'diagnostics')}><span className="activity-dot" /><span className="activity-copy"><strong>{created ? 'Repair case created' : 'Repair case updated'} · {item.id}</strong><small>{item.brand} {item.model} · {statusNames[item.status]}</small></span><time>{dateTimeLabel(item.updated_at)}</time></button>
@@ -2334,6 +2368,10 @@ function CasesPage({
                   <option value="in_repair">In repair</option>
                   <option value="testing">Testing</option>
                   <option value="on_hold">On hold</option>
+                  <option value="pending">Pending repairs</option>
+                  <option value="in_progress">In progress</option>
+                  <option value="awaiting_diagnosis">Awaiting diagnosis</option>
+                  <option value="evidence_to_review">Evidence to review</option>
                 </select>
                 <ChevronDown size={14} />
               </label>
@@ -2633,6 +2671,18 @@ function DiagnosticsPage({
   settings?: AppSettings
 }) {
   const animated = settings?.animationsEnabled ?? true
+  const [reportGeneratedAt, setReportGeneratedAt] = useState<string | null>(null)
+  const reportPrintStarted = useRef(false)
+
+  useEffect(() => {
+    if (!reportGeneratedAt || reportPrintStarted.current) return
+    reportPrintStarted.current = true
+    window.print()
+  }, [reportGeneratedAt])
+  useEffect(() => {
+    setReportGeneratedAt(null)
+    reportPrintStarted.current = false
+  }, [selected?.id])
 
   return (
     <div className="diagnostics-fullscreen-layout">
@@ -2766,6 +2816,9 @@ function DiagnosticsPage({
                   </div>
                   <div className="case-overview-status">
                     <StatusPill status={selected.status} />
+                    <button className="button button-ghost button-sm report-action" onClick={() => { reportPrintStarted.current = false; setReportGeneratedAt(new Date().toISOString()) }}>
+                      <Printer size={14} /> Generate report
+                    </button>
                   </div>
                 </div>
                 <div className="case-symptoms">
@@ -2780,6 +2833,9 @@ function DiagnosticsPage({
                   <span><Activity size={13} /> {selected.tests.length} tests</span>
                 </div>
               </section>
+
+              {selected.data_origin === 'demo' && <div className="demo-record-note">Demo record · timeline entries and alerts below are from sample data.</div>}
+              <SafetyAlertsPanel alerts={selected.safety_alerts} />
 
               <section className="surface-card evidence-card">
                 <div className="section-card-head">
@@ -2851,6 +2907,9 @@ function DiagnosticsPage({
                 )}
               </section>
 
+              <TimelineCard events={selected.timeline} isDemo={selected.data_origin === 'demo'} />
+              <SimilarRepairMemory matches={selected.similar_cases} onOpen={(id) => onOpenCase(id, 'diagnostics')} />
+
               <section className="surface-card outcome-card">
                 <div className="section-card-head">
                   <div>
@@ -2881,6 +2940,14 @@ function DiagnosticsPage({
                   </div>
                 </form>
               </section>
+
+              <RepairReportPrint
+                detail={selected}
+                recommendation={recommendation?.case_id === selected.id ? recommendation : null}
+                alerts={selected.safety_alerts}
+                generatedAt={reportGeneratedAt}
+                stale={stale}
+              />
             </div>
           )}
 
@@ -2919,34 +2986,92 @@ function DiagnosticsPage({
                 </section>
               )}
 
-              {recommendation?.similar_cases && recommendation.similar_cases.length > 0 && (
-                <section className="surface-card side-memory-card">
-                  <div className="section-card-head">
-                    <div>
-                      <h3>Related repair memory</h3>
-                    </div>
-                  </div>
-                  <div className="memory-matches-list">
-                    {recommendation.similar_cases.map((item) => (
-                      <button key={item.id} className="memory-match" onClick={() => onOpenCase(item.id, 'memory')}>
-                        <span className="memory-match-icon"><History size={14} /></span>
-                        <span>
-                          <strong>{item.id} · {item.device}</strong>
-                          <small>{item.issue_title}</small>
-                          <em>Confirmed: {item.confirmed_fault}</em>
-                        </span>
-                        <ChevronRight size={14} />
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              )}
             </div>
           )}
         </>
       )}
       </div>
     </div>
+  )
+}
+
+function SafetyAlertsPanel({ alerts }: { alerts: SafetyAlert[] }) {
+  if (alerts.length === 0) return null
+  return (
+    <section className="surface-card safety-alert-panel" aria-label="Safety alerts">
+      <div className="safety-alert-heading"><AlertTriangle size={17} /><div><h3>Safety alert</h3><p>Based on recorded symptoms or test notes</p></div></div>
+      {alerts.map((alert) => (
+        <article className="safety-alert-item" key={`${alert.title}-${alert.source}`}>
+          <strong>{alert.title}</strong>
+          <p>{alert.instruction}</p>
+          <blockquote>{alert.source}: “{alert.evidence}”</blockquote>
+          <small>{alert.disclaimer} · {dateTimeLabel(alert.recorded_at)}</small>
+        </article>
+      ))}
+    </section>
+  )
+}
+
+function TimelineCard({ events, isDemo }: { events: TimelineEvent[]; isDemo: boolean }) {
+  return (
+    <section className="surface-card repair-timeline-card">
+      <div className="section-card-head"><div><h3>Repair intelligence timeline</h3><p>{isDemo ? 'Sample timeline from saved demo records.' : 'Events are shown only when supported by saved records.'}</p></div></div>
+      {events.length ? (
+        <ol className="repair-timeline-list">
+          {events.map((event) => (
+            <li className="repair-timeline-event" key={event.id}>
+              <span className="timeline-event-dot" />
+              <div><strong>{event.title}</strong><p>{event.description}</p>
+                {event.details && <small>{Object.entries(event.details).map(([key, value]) => `${titleCase(key.replaceAll('_', ' '))}: ${value}`).join(' · ')}</small>}
+                <time>{dateTimeLabel(event.happened_at)}</time>
+              </div>
+            </li>
+          ))}
+        </ol>
+      ) : <div className="inline-empty">No saved timeline events are available.</div>}
+    </section>
+  )
+}
+
+function SimilarRepairMemory({ matches, onOpen }: { matches: SimilarRepair[]; onOpen: (id: string) => void }) {
+  return (
+    <section className="surface-card similar-repair-card">
+      <div className="section-card-head"><div><h3>Similar repair memory</h3><p>Completed, technician-confirmed repairs with overlapping symptoms or test evidence.</p></div></div>
+      {matches.length ? <div className="similar-repair-list">{matches.map((item) => (
+        <article className="similar-repair-item" key={item.id}>
+          <div className="similar-repair-head"><span className="previous-case-label">PREVIOUS CASE</span><button onClick={() => onOpen(item.id)}>{item.id} · {item.device} <ChevronRight size={13} /></button></div>
+          <strong>{item.issue_title}</strong>
+          <p>{item.symptoms}</p>
+          <ul className="similar-reasons">{item.match_reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+          {item.tests.length > 0 && <div className="similar-test-list"><strong>Recorded tests</strong>{item.tests.map((test, index) => <p key={`${item.id}-${index}`}>{test.test_name} · {titleCase(test.result.replaceAll('_', ' '))}: {test.observed_result}</p>)}</div>}
+          <div className="similar-outcome"><span>Past confirmed fault</span><p>{item.confirmed_fault}</p><span>Repair action</span><p>{item.repair_action || 'Unavailable'}</p><span>Recorded outcome</span><p>{item.outcome}</p></div>
+          <small className="similar-disclaimer">{item.disclaimer}</small>
+        </article>
+      ))}</div> : <div className="inline-empty">No completed non-demo repair with sufficiently similar saved symptoms or test evidence was found.</div>}
+    </section>
+  )
+}
+
+function RepairReportPrint({ detail, recommendation, alerts, generatedAt, stale }: {
+  detail: CaseDetail
+  recommendation: Recommendation | null
+  alerts: SafetyAlert[]
+  generatedAt: string | null
+  stale: boolean
+}) {
+  const unavailable = 'Unavailable in saved records'
+  return (
+    <article className="repair-report-print" aria-hidden={!generatedAt}>
+      <header><strong>FIXORA AI</strong><span>Electronics Repair Report</span><small>Generated {generatedAt ? dateTimeLabel(generatedAt) : ''}</small></header>
+      <h1>Repair report · {detail.id}</h1>
+      <section><h2>Device</h2><p><b>Type:</b> {detail.device_category || unavailable}</p><p><b>Brand and model:</b> {[detail.brand, detail.model].filter(Boolean).join(' ') || unavailable}</p><p><b>Current status:</b> {statusNames[detail.status]}</p><p><b>Record origin:</b> {detail.data_origin === 'demo' ? 'Demo sample record' : 'User-entered repair record'}</p></section>
+      <section><h2>Reported issue and symptoms</h2><p><b>Issue:</b> {detail.issue_title || unavailable}</p><p>{detail.symptoms || unavailable}</p></section>
+      <section><h2>Diagnostic tests</h2>{detail.tests.length ? detail.tests.map((test) => <div className="report-test" key={test.id}><strong>{test.test_name} · {titleCase(test.result.replaceAll('_', ' '))}</strong><p>{test.observed_result || unavailable}</p>{test.details && <p><b>Notes:</b> {test.details}</p>}<small>{dateTimeLabel(test.performed_at)}</small></div>) : <p>{unavailable}</p>}</section>
+      <section><h2>Recommendation</h2>{recommendation ? <><p><b>Source:</b> {recommendation.provider === 'gemini_api' ? `Gemma (${recommendation.model_name})` : 'LOCAL RULES'}</p><p><b>Generated:</b> {recommendation.generated_at ? dateTimeLabel(recommendation.generated_at) : unavailable}</p>{stale && <p><b>Evidence status:</b> Outdated; new saved evidence may not be included.</p>}<p><b>Saved tests considered:</b> {(recommendation.content.evidence_test_ids || []).map((id) => detail.tests.find((test) => test.id === id)).filter(Boolean).map((test) => `${test!.test_name} (${titleCase(test!.result.replaceAll('_', ' '))})`).join(', ') || 'None recorded'}</p><p>{recommendation.content.summary}</p><ul>{recommendation.content.next_checks.map((check, index) => <li key={`${check.name}-${index}`}><b>{check.name}:</b> {check.purpose} {check.instructions}</li>)}</ul></> : <p>{unavailable}</p>}</section>
+      <section><h2>Recorded repair outcome</h2><p><b>Confirmed fault:</b> {detail.confirmed_fault || unavailable}</p><p><b>Repair action:</b> {detail.repair_action || unavailable}</p><p><b>Verification outcome:</b> {detail.outcome || unavailable}</p></section>
+      <section><h2>Safety warnings</h2>{alerts.length ? alerts.map((alert) => <p key={alert.title}><b>{alert.title}:</b> {alert.instruction} Evidence: {alert.evidence}</p>) : <p>No safety alert matched the currently saved case text.</p>}</section>
+      <footer>Fixora AI · Report reflects information saved for this repair at generation time.</footer>
+    </article>
   )
 }
 

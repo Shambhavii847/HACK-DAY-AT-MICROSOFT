@@ -22,6 +22,7 @@ export interface RepairCase {
   updated_at: string
   test_count: number
   latest_recommendation_provider: string | null
+  evidence_outdated: boolean
 }
 
 export interface TestResult {
@@ -32,6 +33,41 @@ export interface TestResult {
   observed_result: string
   details: string
   performed_at: string
+}
+
+export interface TimelineEvent {
+  id: string
+  event_type: string
+  title: string
+  description: string
+  happened_at: string
+  details?: Record<string, string>
+}
+
+export interface SafetyAlert {
+  title: string
+  severity: 'caution' | 'urgent' | string
+  instruction: string
+  evidence: string
+  source: string
+  recorded_at: string
+  disclaimer: string
+}
+
+export interface SimilarRepair {
+  id: string
+  device_category: string
+  device: string
+  issue_title: string
+  symptoms: string
+  status: CaseStatus
+  confirmed_fault: string
+  repair_action: string | null
+  outcome: string
+  tests: Array<{ test_name: string; result: TestStatus; observed_result: string; performed_at: string }>
+  data_origin: string
+  match_reasons: string[]
+  disclaimer: string
 }
 
 export interface Hypothesis {
@@ -94,15 +130,32 @@ export interface Recommendation {
 export interface CaseDetail extends RepairCase {
   tests: TestResult[]
   latest_recommendation: Recommendation | null
+  timeline: TimelineEvent[]
+  safety_alerts: SafetyAlert[]
+  similar_cases: SimilarRepair[]
 }
 
 export interface DashboardSummary {
+  total_cases: number
+  pending_repairs: number
+  in_progress: number
+  completed_repairs: number
+  awaiting_diagnosis: number
+  evidence_to_review: number
   active_repairs: number
   ready_for_testing: number
   completed_this_week: number
   saved_cases: number
   needs_attention: number
   recent_cases: RepairCase[]
+  pending_actions: Array<{
+    case_id: string
+    title: string
+    detail: string
+    status: CaseStatus
+    priority: Priority
+    updated_at: string
+  }>
 }
 
 export interface Health {

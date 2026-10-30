@@ -3548,6 +3548,84 @@ a { color: inherit; }
   .standby-actions .game-btn { max-width: none; }
 }
 
+/* Repair intelligence additions are scoped to their own content cards. */
+.overview-workload-strip { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 9px; }
+.workload-stat { display: flex; align-items: baseline; justify-content: center; gap: 7px; min-width: 0; padding: 10px 12px; border: 1px solid rgba(255,255,255,.82); border-radius: 11px; background: rgba(255,255,255,.68); color: #526276; text-align: center; cursor: pointer; }
+.workload-stat:hover { background: rgba(255,255,255,.9); border-color: rgba(64,214,176,.48); }
+.workload-stat strong { color: #233249; font-size: 18px; font-weight: 800; }
+.workload-stat span { font-size: 11px; line-height: 1.3; }
+.overview-data-note { margin: -3px 2px 0; color: #758294; font-size: 10px; line-height: 1.4; }
+.overview-pending-actions { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(127,145,160,.17); }
+.overview-pending-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.overview-pending-heading h3 { margin: 0; color: #28364a; font-size: 13px; }
+.overview-pending-heading > span { display: grid; place-items: center; min-width: 20px; height: 20px; border-radius: 99px; background: #fff0ec; color: #a94d37; font-size: 10px; font-weight: 800; }
+.overview-pending-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 2px; border: 0; border-top: 1px solid #edf0ed; background: transparent; text-align: left; cursor: pointer; }
+.overview-pending-row > span:nth-child(2) { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
+.overview-pending-row strong { color: #33445a; font-size: 12px; }
+.overview-pending-row small { color: #6b788a; font-size: 11px; line-height: 1.4; }
+.overview-pending-row > svg { color: #7a8998; }
+.pending-action-icon { display: grid; flex: 0 0 28px; width: 28px; height: 28px; place-items: center; border-radius: 8px; color: #a85d39; background: #fff3e9; }
+.report-action { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; }
+.demo-record-note { padding: 9px 12px; border: 1px solid #e8ddc4; border-radius: 9px; background: rgba(255,250,237,.84); color: #796641; font-size: 11px; }
+.safety-alert-panel { border-color: rgba(213,134,75,.32); background: rgba(255,249,240,.92); }
+.safety-alert-heading { display: flex; align-items: center; gap: 10px; color: #a14f27; }
+.safety-alert-heading h3 { margin: 0; color: #683b28; font-size: 14px; }
+.safety-alert-heading p { margin: 3px 0 0; color: #876d5b; font-size: 11px; }
+.safety-alert-item { padding-top: 12px; margin-top: 10px; border-top: 1px solid rgba(174,113,69,.18); }
+.safety-alert-item > strong { color: #733f27; font-size: 13px; }
+.safety-alert-item p { margin: 5px 0; color: #654c3d; font-size: 12px; line-height: 1.5; }
+.safety-alert-item blockquote { margin: 6px 0; color: #755e4c; font-size: 11px; line-height: 1.45; }
+.safety-alert-item small { color: #897563; font-size: 10px; }
+.repair-timeline-list { position: relative; display: flex; flex-direction: column; gap: 0; margin: 4px 0 0; padding: 0; list-style: none; }
+.repair-timeline-event { position: relative; display: grid; grid-template-columns: 18px minmax(0,1fr); gap: 10px; padding: 0 0 16px; }
+.repair-timeline-event:not(:last-child)::before { position: absolute; top: 13px; bottom: -1px; left: 6px; width: 1px; background: #dce9e4; content: ''; }
+.timeline-event-dot { z-index: 1; width: 13px; height: 13px; margin-top: 3px; border: 3px solid #dff2eb; border-radius: 50%; background: #36a98c; }
+.repair-timeline-event strong { color: #33445a; font-size: 12px; }
+.repair-timeline-event p { margin: 4px 0; color: #637185; font-size: 12px; line-height: 1.5; white-space: pre-wrap; }
+.repair-timeline-event small, .repair-timeline-event time { display: block; margin-top: 3px; color: #8290a0; font-size: 10px; line-height: 1.45; }
+.similar-repair-card .section-card-head p { margin: 3px 0 0; color: #6e7c8e; font-size: 11px; }
+.similar-repair-list { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+.similar-repair-item { min-width: 0; padding: 14px; border: 1px solid #e7eee9; border-radius: 12px; background: rgba(250,253,251,.82); }
+.similar-repair-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
+.previous-case-label { padding: 4px 7px; border-radius: 5px; background: #edf4f1; color: #537567; font-size: 9px; font-weight: 800; letter-spacing: .45px; }
+.similar-repair-head button { display: inline-flex; align-items: center; border: 0; background: transparent; color: #376f60; font-size: 11px; font-weight: 750; cursor: pointer; }
+.similar-repair-item > strong { color: #2c3c50; font-size: 13px; }
+.similar-repair-item > p { margin: 5px 0; color: #657487; font-size: 11px; line-height: 1.45; }
+.similar-reasons { margin: 8px 0; padding-left: 16px; color: #5b7669; font-size: 10px; line-height: 1.5; }
+.similar-test-list { padding: 8px 0; border-top: 1px solid #e8efeb; }
+.similar-test-list > strong, .similar-outcome > span { color: #798798; font-size: 9px; font-weight: 800; letter-spacing: .45px; text-transform: uppercase; }
+.similar-test-list p { margin: 4px 0; color: #536477; font-size: 10px; line-height: 1.4; }
+.similar-outcome { padding-top: 8px; border-top: 1px solid #e8efeb; }
+.similar-outcome p { margin: 3px 0 8px; color: #45566b; font-size: 11px; line-height: 1.4; }
+.similar-disclaimer { display: block; padding-top: 8px; border-top: 1px solid #e8efeb; color: #788596; font-size: 10px; line-height: 1.45; }
+.repair-report-print { display: none; }
+@media (max-width: 760px) {
+  .overview-workload-strip { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .overview-workload-strip .workload-stat:last-child { grid-column: span 2; }
+  .workload-stat { justify-content: flex-start; }
+  .similar-repair-list { grid-template-columns: 1fr; }
+  .case-overview-status { align-items: flex-start; }
+}
+@media (min-width: 761px) and (max-width: 1100px) { .overview-workload-strip { grid-template-columns: repeat(3, minmax(0,1fr)); } }
+@media print {
+  @page { margin: 15mm; }
+  body { background: #fff !important; }
+  body * { visibility: hidden !important; }
+  .repair-report-print, .repair-report-print * { visibility: visible !important; }
+  .repair-report-print { display: block !important; position: absolute; inset: 0; width: 100%; color: #1f2937; background: #fff; font: 11pt/1.45 Arial, sans-serif; }
+  .repair-report-print header { display: flex; align-items: baseline; gap: 12px; padding-bottom: 12px; border-bottom: 2px solid #334155; }
+  .repair-report-print header strong { font-size: 16pt; letter-spacing: 1px; }
+  .repair-report-print header span { flex: 1; font-size: 13pt; }
+  .repair-report-print header small, .repair-report-print small { color: #64748b; font-size: 9pt; }
+  .repair-report-print h1 { margin: 18px 0 12px; font-size: 19pt; }
+  .repair-report-print h2 { margin: 16px 0 6px; padding-bottom: 4px; border-bottom: 1px solid #cbd5e1; font-size: 13pt; }
+  .repair-report-print p { margin: 4px 0; white-space: pre-wrap; }
+  .repair-report-print ul { padding-left: 20px; }
+  .repair-report-print li { margin: 5px 0; }
+  .repair-report-print .report-test { margin: 8px 0; padding: 0 0 8px; border-bottom: 1px solid #e2e8f0; break-inside: avoid; }
+  .repair-report-print footer { margin-top: 22px; padding-top: 8px; border-top: 1px solid #cbd5e1; color: #64748b; font-size: 9pt; }
+}
+
 /* ----------------------------------------------------
    Page Transition Animations (Snappy & Snazzy)
    ---------------------------------------------------- */
@@ -4240,5 +4318,224 @@ body.high-contrast-hud .game-btn {
   }
   .settings-row {
     align-items: flex-start;
+  }
+}
+
+/* Diagnostics content readability refinements. Keep all decorative layers untouched. */
+.diagnostics-negative-hud {
+  min-width: 0;
+}
+
+.diagnostics-negative-hud .surface-card {
+  overflow-wrap: anywhere;
+}
+
+.diagnostics-negative-hud .case-overview-top {
+  align-items: center;
+}
+
+.diagnostics-negative-hud .case-overview-status {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.diagnostics-negative-hud .case-overview-status .button {
+  white-space: nowrap;
+}
+
+.diagnostics-negative-hud .section-card-head {
+  align-items: center;
+  gap: 14px;
+}
+
+.diagnostics-negative-hud .section-card-head h3,
+.diagnostics-negative-hud .ai-clean-copilot h3,
+.diagnostics-negative-hud .waiting-panel-clean h3 {
+  line-height: 1.35;
+}
+
+.diagnostics-negative-hud .evidence-heading {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.diagnostics-negative-hud .evidence-heading strong,
+.diagnostics-negative-hud .evidence-copy p,
+.diagnostics-negative-hud .evidence-copy small,
+.diagnostics-negative-hud .recommendation-summary,
+.diagnostics-negative-hud .hypothesis-detail,
+.diagnostics-negative-hud .next-check-body,
+.diagnostics-negative-hud .missing-info-box,
+.diagnostics-negative-hud .source-reference span {
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+}
+
+.diagnostics-negative-hud .inline-empty {
+  align-items: flex-start;
+  line-height: 1.55;
+}
+
+.diagnostics-negative-hud .add-test-form,
+.diagnostics-negative-hud .outcome-form {
+  text-align: left;
+}
+
+.diagnostics-negative-hud .form-grid label,
+.diagnostics-negative-hud .outcome-form label {
+  line-height: 1.45;
+}
+
+.diagnostics-negative-hud .form-grid input,
+.diagnostics-negative-hud .form-grid select,
+.diagnostics-negative-hud .form-grid textarea,
+.diagnostics-negative-hud .outcome-form input,
+.diagnostics-negative-hud .outcome-form select,
+.diagnostics-negative-hud .outcome-form textarea {
+  min-height: 44px;
+  line-height: 1.45;
+}
+
+.diagnostics-negative-hud .form-grid textarea,
+.diagnostics-negative-hud .outcome-form textarea {
+  min-height: 86px;
+}
+
+.diagnostics-negative-hud .outcome-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.diagnostics-negative-hud .outcome-form > label:nth-of-type(3),
+.diagnostics-negative-hud .outcome-actions {
+  grid-column: 1 / -1;
+}
+
+.diagnostics-negative-hud .outcome-actions {
+  align-items: flex-end;
+}
+
+.diagnostics-negative-hud .outcome-actions .button {
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.diagnostics-negative-hud .ai-clean-copilot .ai-panel-header {
+  flex-wrap: wrap;
+}
+
+.diagnostics-negative-hud .ai-clean-copilot .ai-panel-header > div:nth-child(2) {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.diagnostics-negative-hud .ai-clean-copilot .button {
+  max-width: 100%;
+}
+
+@media (max-width: 760px) {
+  .diagnostics-negative-hud {
+    gap: 18px;
+  }
+
+  .diagnostics-negative-hud .case-overview-card {
+    padding: 20px 18px 0;
+  }
+
+  .diagnostics-negative-hud .case-overview-top {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .diagnostics-negative-hud .case-overview-id {
+    flex: 1 1 calc(100% - 64px);
+  }
+
+  .diagnostics-negative-hud .case-overview-status {
+    flex: 1 1 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    padding-left: 60px;
+  }
+
+  .diagnostics-negative-hud .section-card-head {
+    padding: 17px 18px;
+  }
+
+  .diagnostics-negative-hud .evidence-item {
+    gap: 11px;
+    padding: 15px 18px;
+  }
+
+  .diagnostics-negative-hud .add-test-form {
+    padding: 18px 18px 8px;
+  }
+
+  .diagnostics-negative-hud .outcome-form {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 4px 18px 18px;
+  }
+
+  .diagnostics-negative-hud .outcome-form > label:nth-of-type(3),
+  .diagnostics-negative-hud .outcome-actions {
+    grid-column: auto;
+  }
+
+  .diagnostics-negative-hud .outcome-actions {
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  .diagnostics-negative-hud .outcome-status-label {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  .diagnostics-negative-hud .outcome-actions > .button {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .diagnostics-negative-hud .ai-clean-copilot {
+    padding: 18px;
+  }
+
+  .diagnostics-negative-hud .ai-clean-copilot .ai-panel-header {
+    align-items: flex-start;
+  }
+
+  .diagnostics-negative-hud .ai-clean-copilot .ai-panel-header > .button {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 520px) {
+  .diagnostics-fullscreen-layout {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .diagnostics-negative-hud .form-grid.two-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .diagnostics-negative-hud .form-grid .span-two {
+    grid-column: auto;
+  }
+
+  .diagnostics-negative-hud .case-overview-status {
+    padding-left: 0;
+  }
+
+  .diagnostics-negative-hud .case-overview-foot {
+    gap: 10px 16px;
   }
 }

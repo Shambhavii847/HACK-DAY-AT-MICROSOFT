@@ -91,6 +91,7 @@ class CaseRead(BaseModel):
     updated_at: datetime
     test_count: int = 0
     latest_recommendation_provider: str | None = None
+    evidence_outdated: bool = False
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -134,12 +135,19 @@ class RecommendationRead(BaseModel):
 
 
 class DashboardSummary(BaseModel):
+    total_cases: int
+    pending_repairs: int
+    in_progress: int
+    completed_repairs: int
+    awaiting_diagnosis: int
+    evidence_to_review: int
     active_repairs: int
     ready_for_testing: int
     completed_this_week: int
     saved_cases: int
     needs_attention: int
     recent_cases: list[CaseRead]
+    pending_actions: list[dict[str, str | int]] = Field(default_factory=list)
 
 
 class HealthRead(BaseModel):

@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from datetime import timedelta
+import json
 import logging
 import re
 from typing import Any
@@ -7,11 +8,12 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
-from .ai_service import generate_recommendation, serialize_recommendation, _similar_cases
+from .ai_service import generate_recommendation, serialize_recommendation
 from .config import settings
 from .database import create_schema, get_db, SessionLocal
 from .knowledge import KNOWLEDGE_SOURCES
-from .models import Recommendation, RepairCase, TestResult, utcnow
+from .models import Recommendation, RepairCase, RepairEvent, TestResult, utcnow
+from .intelligence import build_timeline, create_status_event, outdated_test_ids, safety_alerts, similar_repairs
 from .schemas import (
     CaseRead, DashboardSummary, HealthRead, RepairCaseCreate, RepairCaseUpdate,
     RepairOutcomeCreate, RecommendationContent, TestResultCreate, TestResultRead,
@@ -70,6 +72,7 @@ def _case_read(case: RepairCase) -> dict[str, Any]:
         "updated_at": case.updated_at,
         "test_count": len(case.tests),
         "latest_recommendation_provider": latest.provider if latest else None,
+        "evidence_outdated": bool(outdated_test_ids(case)),
     }
 
 
@@ -106,20 +109,58 @@ def health() -> dict[str, Any]:
 @app.get("/api/dashboard", response_model=DashboardSummary, tags=["dashboard"])
 def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
     cases = db.query(RepairCase).options(joinedload(RepairCase.tests), joinedload(RepairCase.recommendations)).all()
+    tracked_cases = [case for case in cases if case.data_origin != "demo"]
     now = utcnow()
     week_start = now - timedelta(days=7)
-    active = [c for c in cases if c.status in ACTIVE_STATUSES and c.status != "on_hold"]
-    ready = [c for c in cases if c.status == "testing"]
-    completed = [c for c in cases if c.status == "completed" and c.updated_at >= week_start]
-    attention = [c for c in cases if c.priority in {"high", "urgent"} and c.status in ACTIVE_STATUSES]
-    recent = sorted(cases, key=lambda c: c.updated_at, reverse=True)[:6]
+    active = [c for c in tracked_cases if c.status in ACTIVE_STATUSES and c.status != "on_hold"]
+    ready = [c for c in tracked_cases if c.status == "testing"]
+    completed = [c for c in tracked_cases if c.status == "completed" and c.updated_at >= week_start]
+    attention = [c for c in tracked_cases if c.priority in {"high", "urgent"} and c.status in ACTIVE_STATUSES]
+    recent = sorted(tracked_cases, key=lambda c: c.updated_at, reverse=True)[:6]
+    evidence_cases = [case for case in tracked_cases if outdated_test_ids(case)]
+    pending_actions: list[dict[str, Any]] = []
+    for case in tracked_cases:
+        if case.status == "completed":
+            continue
+        unreviewed = outdated_test_ids(case)
+        if unreviewed:
+            action, detail = "Review new evidence", f"{len(unreviewed)} saved test(s) are not in the latest recommendation."
+        elif case.status == "waiting_parts":
+            action, detail = "Follow up on parts", "This repair is waiting for parts."
+        elif case.status == "on_hold":
+            action, detail = "Review hold", "This repair is on hold and needs a technician review."
+        elif case.status in {"new", "diagnosing"} and not case.tests:
+            action, detail = "Record diagnostic evidence", "No diagnostic tests are saved for this repair yet."
+        elif case.status == "testing":
+            action, detail = "Verify repair outcome", "This repair is ready for final verification."
+        else:
+            continue
+        pending_actions.append({
+            "case_id": case.id,
+            "title": action,
+            "detail": detail,
+            "status": case.status,
+            "priority": case.priority,
+            "updated_at": case.updated_at.isoformat(),
+        })
+    pending_actions.sort(key=lambda item: (
+        0 if item["priority"] == "urgent" else 1 if item["priority"] == "high" else 2,
+        item["updated_at"],
+    ))
     return {
+        "total_cases": len(tracked_cases),
+        "pending_repairs": sum(1 for c in tracked_cases if c.status in {"new", "diagnosing", "waiting_parts", "on_hold"}),
+        "in_progress": sum(1 for c in tracked_cases if c.status in {"in_repair", "testing"}),
+        "completed_repairs": sum(1 for c in tracked_cases if c.status == "completed"),
+        "awaiting_diagnosis": sum(1 for c in tracked_cases if c.status in {"new", "diagnosing"}),
+        "evidence_to_review": len(evidence_cases),
         "active_repairs": len(active),
         "ready_for_testing": len(ready),
         "completed_this_week": len(completed),
-        "saved_cases": sum(1 for c in cases if c.status == "completed" and c.confirmed_fault and c.outcome),
+        "saved_cases": sum(1 for c in tracked_cases if c.status == "completed" and c.confirmed_fault and c.outcome),
         "needs_attention": len(attention),
         "recent_cases": [_case_read(case) for case in recent],
+        "pending_actions": pending_actions[:8],
     }
 
 
@@ -188,7 +229,15 @@ def get_case(case_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     case = _get_case_or_404(db, case_id)
     latest = case.recommendations[-1] if case.recommendations else None
     recommendation = serialize_recommendation(latest, KNOWLEDGE_SOURCES) if latest else None
-    return {**_case_read(case), "tests": [TestResultRead.model_validate(t).model_dump(mode="json") for t in case.tests], "latest_recommendation": recommendation}
+    events = db.query(RepairEvent).filter(RepairEvent.case_id == case.id).order_by(RepairEvent.occurred_at, RepairEvent.id).all()
+    return {
+        **_case_read(case),
+        "tests": [TestResultRead.model_validate(t).model_dump(mode="json") for t in case.tests],
+        "latest_recommendation": recommendation,
+        "timeline": build_timeline(case, events),
+        "safety_alerts": safety_alerts(case),
+        "similar_cases": similar_repairs(db, case),
+    }
 
 
 @app.patch("/api/cases/{case_id}", response_model=CaseRead, tags=["cases"])
@@ -197,10 +246,13 @@ def update_case(case_id: str, payload: RepairCaseUpdate, db: Session = Depends(g
     updates = payload.model_dump(exclude_unset=True)
     if updates.get("status") == "completed" and not (case.confirmed_fault and case.repair_action and case.outcome):
         raise HTTPException(status_code=409, detail="Document the technician-confirmed fault, repair action, and verification outcome in Diagnostics before completing this case.")
+    old_status = case.status
     for key, value in updates.items():
         if value is not None:
             setattr(case, key, value.strip() if isinstance(value, str) else value)
     case.updated_at = utcnow()
+    if "status" in updates and updates["status"] is not None:
+        create_status_event(db, case, old_status, case.status)
     db.commit()
     db.refresh(case)
     return _case_read(case)
@@ -211,6 +263,7 @@ def add_test_result(case_id: str, payload: TestResultCreate, db: Session = Depen
     case = _get_case_or_404(db, case_id)
     if case.status in {"completed", "on_hold"}:
         raise HTTPException(status_code=409, detail="This case is completed or on hold. Update its status before recording more tests.")
+    old_status = case.status
     row = TestResult(
         case_id=case.id,
         test_name=payload.test_name.strip(),
@@ -220,6 +273,7 @@ def add_test_result(case_id: str, payload: TestResultCreate, db: Session = Depen
     )
     case.status = "diagnosing"
     case.updated_at = utcnow()
+    create_status_event(db, case, old_status, case.status)
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -238,8 +292,10 @@ def create_recommendation(case_id: str, db: Session = Depends(get_db)) -> dict[s
         model_name=model_name,
         content_json=content.model_dump_json(),
     )
+    old_status = case.status
     if case.status == "new":
         case.status = "diagnosing"
+        create_status_event(db, case, old_status, case.status)
     case.updated_at = utcnow()
     db.add(row)
     db.commit()
@@ -250,17 +306,29 @@ def create_recommendation(case_id: str, db: Session = Depends(get_db)) -> dict[s
 @app.get("/api/cases/{case_id}/similar", tags=["memory"])
 def similar_cases(case_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     case = _get_case_or_404(db, case_id)
-    return {"case_id": case.id, "matches": _similar_cases(db, case)}
+    return {"case_id": case.id, "matches": similar_repairs(db, case)}
 
 
 @app.post("/api/cases/{case_id}/outcome", tags=["cases"])
 def record_outcome(case_id: str, payload: RepairOutcomeCreate, db: Session = Depends(get_db)) -> dict[str, Any]:
     case = _get_case_or_404(db, case_id)
+    old_status = case.status
     case.confirmed_fault = payload.confirmed_fault.strip()
     case.repair_action = payload.repair_action.strip()
     case.outcome = payload.outcome.strip()
     case.status = payload.status
     case.updated_at = utcnow()
+    create_status_event(db, case, old_status, case.status)
+    db.add(RepairEvent(
+        case_id=case.id,
+        event_type="outcome_recorded",
+        description="Repair outcome recorded.",
+        details_json=json.dumps({
+            "confirmed_fault": case.confirmed_fault,
+            "repair_action": case.repair_action,
+            "outcome": case.outcome,
+        }),
+    ))
     db.commit()
     db.refresh(case)
     return _case_read(case)

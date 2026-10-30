@@ -31,6 +31,7 @@ class RepairCase(Base):
 
     tests: Mapped[list["TestResult"]] = relationship(back_populates="case", cascade="all, delete-orphan", order_by="TestResult.performed_at")
     recommendations: Mapped[list["Recommendation"]] = relationship(back_populates="case", cascade="all, delete-orphan", order_by="Recommendation.created_at")
+    events: Mapped[list["RepairEvent"]] = relationship(back_populates="case", cascade="all, delete-orphan", order_by="RepairEvent.occurred_at")
 
 
 class TestResult(Base):
@@ -58,3 +59,17 @@ class Recommendation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     case: Mapped[RepairCase] = relationship(back_populates="recommendations")
+
+
+class RepairEvent(Base):
+    """Explicitly tracked repair events that cannot be reconstructed from current case state."""
+    __tablename__ = "repair_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("repair_cases.id", ondelete="CASCADE"), index=True)
+    event_type: Mapped[str] = mapped_column(String(40), index=True)
+    description: Mapped[str] = mapped_column(String(500))
+    details_json: Mapped[str] = mapped_column(Text, default="{}")
+    occurred_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+    case: Mapped[RepairCase] = relationship(back_populates="events")
