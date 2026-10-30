@@ -99,7 +99,7 @@ def health() -> dict[str, Any]:
         "model_name": settings.gemma_model,
         "model_configured": configured,
         "inference_mode": "gemini_api" if configured else "rule_based_fallback",
-        "note": "Gemma 4 API ready; credentials are configured." if configured else "No API key found. The app works with visibly labelled local rule-based demo guidance.",
+        "note": "Gemma API credentials are configured; connectivity is checked when a recommendation is requested." if configured else "No API key found. The app works with visibly labelled local rule-based demo guidance.",
     }
 
 
