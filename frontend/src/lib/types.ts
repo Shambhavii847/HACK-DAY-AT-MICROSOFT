@@ -21,6 +21,7 @@ export interface RepairCase {
   created_at: string
   updated_at: string
   test_count: number
+  tracked_components_count?: number
   latest_recommendation_provider: string | null
 }
 
@@ -90,6 +91,7 @@ export interface Recommendation {
 
 export interface CaseDetail extends RepairCase {
   tests: TestResult[]
+  components?: Component[]
   latest_recommendation: Recommendation | null
 }
 
@@ -109,4 +111,97 @@ export interface Health {
   model_configured: boolean
   inference_mode: 'gemini_api' | 'rule_based_fallback'
   note: string
+}
+
+export type ComponentHealthStatus = 'working' | 'faulty' | 'needs_testing' | 'unknown'
+export type ComponentReuseStatus = 'eligible' | 'reserved' | 'consumed' | 'ineligible'
+export type ComponentResaleStatus = 'under_review' | 'approved' | 'not_eligible'
+
+export interface Component {
+  id: string
+  name: string
+  part_number: string
+  category: string
+  quantity: number
+  reserved_quantity: number
+  used_quantity: number
+  condition: string
+  location: string | null
+  case_id: string | null
+  source_device: string | null
+  health_status: ComponentHealthStatus
+  test_evidence: string | null
+  tested_at: string | null
+  reuse_status: ComponentReuseStatus
+  reuse_notes: string | null
+  is_reuse_eligible: boolean
+  resale_status: ComponentResaleStatus
+  resale_decision: string | null
+  resale_reason: string | null
+  resale_condition: string | null
+  resale_price: number | null
+  reviewed_at: string | null
+  reviewed_by: string | null
+  created_at: string
+  updated_at: string
+  case_info?: {
+    id: string
+    brand: string
+    model: string
+    status: string
+    issue_title: string
+  } | null
+}
+
+export interface ComponentSummary {
+  total_components: number
+  total_quantity: number
+  working_count: number
+  needs_testing_count: number
+  faulty_count: number
+  reuse_eligible_count: number
+  reserved_count: number
+  resale_approved_count: number
+  resale_under_review_count: number
+}
+
+export interface ComponentCreate {
+  name: string
+  part_number?: string
+  category?: string
+  quantity?: number
+  condition?: string
+  location?: string | null
+  case_id?: string | null
+  source_device?: string | null
+  health_status?: ComponentHealthStatus
+  test_evidence?: string | null
+}
+
+export interface ComponentUpdate {
+  name?: string
+  part_number?: string
+  category?: string
+  quantity?: number
+  condition?: string
+  location?: string | null
+  case_id?: string | null
+  source_device?: string | null
+  health_status?: ComponentHealthStatus
+  test_evidence?: string | null
+}
+
+export interface ComponentReuseAction {
+  action: 'reserve' | 'use' | 'release'
+  quantity: number
+  case_id?: string | null
+  notes?: string | null
+}
+
+export interface ComponentResaleReview {
+  resale_status: ComponentResaleStatus
+  review_reason: string
+  review_condition?: string | null
+  resale_price?: number | null
+  reviewed_by?: string | null
 }

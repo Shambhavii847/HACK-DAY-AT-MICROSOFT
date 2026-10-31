@@ -35,15 +35,15 @@ if [[ ! -f "$BACKEND_DIR/.env" ]]; then
 fi
 
 echo
-echo "Starting Fixora AI..."
+echo "Starting Revix AI..."
 echo "Frontend: http://localhost:5173"
 echo "Backend:  http://localhost:8000"
 echo "API docs: http://localhost:8000/docs"
 echo "Press Ctrl+C to stop both servers."
 
-(cd "$BACKEND_DIR" && exec ./.venv/bin/uvicorn app.main:app --reload --host 127.0.0.1 --port 8000) &
+(cd "$BACKEND_DIR" && exec ./.venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000) &
 BACKEND_PID=$!
-(cd "$FRONTEND_DIR" && exec npm run dev -- --host 127.0.0.1) &
+(cd "$FRONTEND_DIR" && exec npm run dev -- --host 0.0.0.0) &
 FRONTEND_PID=$!
 cleanup() {
   kill "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true

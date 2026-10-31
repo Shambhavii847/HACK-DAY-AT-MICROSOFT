@@ -15,8 +15,14 @@ venv/
 .coverage
 htmlcov/
 backend/fixora.db
+backend/revix.db
+backend/*.db
 backend/*.db-shm
 backend/*.db-wal
+revix.db
+*.db
+*.db-shm
+*.db-wal
 
 # Node / Vite
 node_modules/
