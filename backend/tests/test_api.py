@@ -1,45 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
-from app.database import Base, get_db
-from app.config import settings
 from app.main import app
-
-TEST_ENGINE = create_engine(
-    "sqlite://",
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-TestSession = sessionmaker(bind=TEST_ENGINE, autoflush=False, autocommit=False)
-Base.metadata.create_all(bind=TEST_ENGINE)
-
-
-def override_get_db():
-    db = TestSession()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-app.dependency_overrides[get_db] = override_get_db
-
-
-@pytest.fixture(autouse=True)
-def no_external_model_calls(monkeypatch):
-    # Tests must remain deterministic and never call an external API even if a local .env exists.
-    monkeypatch.setattr(settings, "gemini_api_key", None)
-
-
-def setup_function():
-    Base.metadata.drop_all(bind=TEST_ENGINE)
-    Base.metadata.create_all(bind=TEST_ENGINE)
-    from app.seed import seed_demo_data
-    with TestSession() as db:
-        seed_demo_data(db)
 
 
 def test_health_discloses_inference_mode():
@@ -149,3 +110,39 @@ def test_delete_case():
 
         get_resp = client.get(f"/api/cases/{case_id}")
         assert get_resp.status_code == 404
+
+
+def test_language_recommendation_and_voice_briefing():
+    with TestClient(app) as client:
+        created = client.post("/api/cases", json={
+            "device_category": "Smartphone",
+            "brand": "Samsung",
+            "model": "Galaxy A54",
+            "issue_title": "Intermittent charging",
+            "symptoms": "Charges only when cable is angled.",
+            "priority": "normal",
+        })
+        assert created.status_code == 201
+        case_id = created.json()["id"]
+
+        # Test Hindi recommendation
+        hi_rec = client.post(f"/api/cases/{case_id}/recommendation?language=hi")
+        assert hi_rec.status_code == 200
+        hi_data = hi_rec.json()
+        assert "डायग्नोस्टिक" in hi_data["content"]["summary"] or "के लिए" in hi_data["content"]["summary"]
+
+        # Test Hinglish recommendation
+        latn_rec = client.post(f"/api/cases/{case_id}/recommendation?language=hi-Latn")
+        assert latn_rec.status_code == 200
+
+        # Test Hindi voice briefing
+        hi_voice = client.post(f"/api/cases/{case_id}/voice-briefing?language=hi")
+        assert hi_voice.status_code == 200
+        assert "briefing_text" in hi_voice.json()
+        assert hi_voice.json()["language"] == "hi"
+
+        # Test Hinglish voice briefing
+        latn_voice = client.post(f"/api/cases/{case_id}/voice-briefing?language=hi-Latn")
+        assert latn_voice.status_code == 200
+        assert "briefing_text" in latn_voice.json()
+        assert latn_voice.json()["language"] == "hi-Latn"

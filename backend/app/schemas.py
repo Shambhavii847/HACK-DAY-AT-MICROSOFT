@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 CaseStatus = Literal["new", "diagnosing", "waiting_parts", "in_repair", "testing", "completed", "on_hold"]
@@ -46,6 +46,7 @@ class RepairCaseCreate(BaseModel):
     customer_contact: str | None = Field(default=None, max_length=120)
     estimated_minutes: int | None = Field(default=None, ge=1, le=10000)
     estimate_cost: float | None = Field(default=None, ge=0, le=10000000)
+    suspected_component: str | None = Field(default=None, max_length=160)
 
     @field_validator("brand", "model", "issue_title", "symptoms")
     @classmethod
@@ -90,6 +91,7 @@ class CaseRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     test_count: int = 0
+    tracked_components_count: int = 0
     latest_recommendation_provider: str | None = None
     model_config = ConfigDict(from_attributes=True)
 
@@ -146,3 +148,100 @@ class HealthRead(BaseModel):
     model_configured: bool
     inference_mode: Literal["gemini_api", "rule_based_fallback"]
     note: str
+
+
+ComponentHealthStatus = Literal["working", "faulty", "needs_testing", "unknown"]
+ComponentReuseStatus = Literal["eligible", "reserved", "consumed", "ineligible"]
+ComponentResaleStatus = Literal["under_review", "approved", "not_eligible"]
+
+
+class ComponentCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+    part_number: str = Field(default="", max_length=100)
+    category: str = Field(default="General", max_length=60)
+    quantity: int = Field(default=1, ge=0, le=100000)
+    condition: str = Field(default="Good", max_length=40)
+    location: str | None = Field(default=None, max_length=100)
+    case_id: str | None = Field(default=None, max_length=30)
+    source_device: str | None = Field(default=None, max_length=120)
+    health_status: ComponentHealthStatus = "needs_testing"
+    test_evidence: str | None = Field(default=None, max_length=3000)
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Component name cannot be empty")
+        return value
+
+
+class ComponentUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=160)
+    part_number: str | None = Field(default=None, max_length=100)
+    category: str | None = Field(default=None, max_length=60)
+    quantity: int | None = Field(default=None, ge=0, le=100000)
+    condition: str | None = Field(default=None, max_length=40)
+    location: str | None = Field(default=None, max_length=100)
+    case_id: str | None = Field(default=None, max_length=30)
+    source_device: str | None = Field(default=None, max_length=120)
+    health_status: ComponentHealthStatus | None = None
+    test_evidence: str | None = Field(default=None, max_length=3000)
+
+
+class ComponentReuseAction(BaseModel):
+    action: Literal["reserve", "use", "release"]
+    quantity: int = Field(default=1, ge=1, le=1000)
+    case_id: str | None = Field(default=None, max_length=30)
+    notes: str | None = Field(default=None, max_length=500)
+
+
+class ComponentResaleReview(BaseModel):
+    resale_status: ComponentResaleStatus
+    review_reason: str = Field(min_length=3, max_length=1500)
+    review_condition: str | None = Field(default=None, max_length=100)
+    resale_price: float | None = Field(default=None, ge=0, le=1000000)
+    reviewed_by: str | None = Field(default=None, max_length=80)
+
+
+class ComponentRead(BaseModel):
+    id: str
+    name: str
+    part_number: str
+    category: str
+    quantity: int
+    reserved_quantity: int
+    used_quantity: int
+    condition: str
+    location: str | None = None
+    case_id: str | None = None
+    source_device: str | None = None
+    health_status: str
+    test_evidence: str | None = None
+    tested_at: datetime | None = None
+    reuse_status: str
+    reuse_notes: str | None = None
+    is_reuse_eligible: bool = False
+    resale_status: str
+    resale_decision: str | None = None
+    resale_reason: str | None = None
+    resale_condition: str | None = None
+    resale_price: float | None = None
+    reviewed_at: datetime | None = None
+    reviewed_by: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    case_info: dict[str, Any] | None = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ComponentSummary(BaseModel):
+    total_components: int
+    total_quantity: int
+    working_count: int
+    needs_testing_count: int
+    faulty_count: int
+    reuse_eligible_count: int
+    reserved_count: int
+    resale_approved_count: int
+    resale_under_review_count: int

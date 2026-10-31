@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { Dispatch, FormEvent, SetStateAction } from 'react'
 import {
   Activity, AlertCircle, AlertTriangle, ArrowRight,
@@ -7,31 +8,44 @@ import {
   LoaderCircle, Mail, Phone, Plus, RefreshCw, RotateCcw, Search,
   Settings, ShieldCheck, Smartphone, Sparkles, Stethoscope, Trash2,
   Volume2, VolumeX, X, Zap,
+  Laptop, Tablet, Headphones, SlidersHorizontal,
   ClipboardCheck, PackageSearch, BrainCircuit,
+  Play, Pause, Square, Languages, Radio,
+  Box, DollarSign, Wrench, ShieldAlert, Tag,
 } from 'lucide-react'
 import { api } from './lib/api'
 import type {
   CaseDetail, CaseStatus, DashboardSummary, Health,
   NextCheck, Priority, Recommendation, RepairCase, TestStatus,
+  Component, ComponentSummary, ComponentHealthStatus,
+  ComponentResaleStatus,
 } from './lib/types'
+
+import { translations, tContent } from './lib/i18n'
+import type { DiagnosticLanguage, I18nCatalog } from './lib/i18n'
 
 const navItems = [
   { id: 'home', label: 'Home', icon: House },
   { id: 'overview', label: 'Overview', icon: Eye },
   { id: 'cases', label: 'Repair Queue', icon: Layers3 },
   { id: 'diagnostics', label: 'Diagnostics', icon: Stethoscope },
+  { id: 'components', label: 'Components', icon: PackageSearch },
   { id: 'memory', label: 'Repair Memory', icon: History },
 ] as const
 
 type NavId = typeof navItems[number]['id']
 type Notice = { kind: 'success' | 'error' | 'info'; text: string } | null
 
+export type { DiagnosticLanguage }
+
 export interface AppSettings {
   animationsEnabled: boolean
   hardwareTelemetry: boolean
   highContrastHUD: boolean
   audioEffects: boolean
-  modelEngine: 'gemma-4' | 'fallback-rules'
+  modelEngine: 'flash-turbo' | 'gemini-flash' | 'gemma-4' | 'fallback-rules'
+  aiAcceleration: boolean
+  language: DiagnosticLanguage
   autoTriageOnCreate: boolean
   strictSafety: boolean
   confirmDelete: boolean
@@ -45,6 +59,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   highContrastHUD: false,
   audioEffects: true,
   modelEngine: 'gemma-4',
+  aiAcceleration: true,
+  language: 'en',
   autoTriageOnCreate: true,
   strictSafety: true,
   confirmDelete: true,
@@ -52,7 +68,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   autoArchive: true,
 }
 
-const SETTINGS_STORAGE_KEY = 'fixora_app_settings_v1'
+const SETTINGS_STORAGE_KEY = 'revix_app_settings_v1'
 
 function playUiSound(type: 'click' | 'toggle' | 'boot' | 'danger', settings: AppSettings) {
   if (!settings.audioEffects || !settings.animationsEnabled) return
@@ -120,14 +136,6 @@ const priorityNames: Record<Priority, string> = {
   urgent: 'Urgent',
 }
 
-const testOptions: Array<{ value: TestStatus; label: string }> = [
-  { value: 'pass', label: 'Pass / changed as expected' },
-  { value: 'fail', label: 'Fail / issue persists' },
-  { value: 'inconclusive', label: 'Inconclusive' },
-  { value: 'not_tested', label: 'Not tested yet' },
-  { value: 'not_applicable', label: 'Not applicable' },
-]
-
 const testSuggestions = [
   'Known-good compatible cable',
   'Known-good compatible power adapter',
@@ -184,16 +192,18 @@ function titleCase(value: string) {
   return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
-function dateLabel(value: string | null | undefined) {
-  if (!value) return 'Not recorded'
+function dateLabel(value: string | null | undefined, lang: DiagnosticLanguage = 'en') {
+  if (!value) return translations[lang]?.telemetry.notRecorded || 'Not recorded'
   const date = new Date(value)
-  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+  const locale = lang === 'hi' ? 'hi-IN' : 'en-IN'
+  return date.toLocaleDateString(locale, { day: '2-digit', month: 'short' })
 }
 
-function dateTimeLabel(value: string | null | undefined) {
-  if (!value) return 'Not recorded'
+function dateTimeLabel(value: string | null | undefined, lang: DiagnosticLanguage = 'en') {
+  if (!value) return translations[lang]?.telemetry.notRecorded || 'Not recorded'
   const date = new Date(value)
-  return `${date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} · ${date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
+  const locale = lang === 'hi' ? 'hi-IN' : 'en-IN'
+  return `${date.toLocaleDateString(locale, { day: '2-digit', month: 'short' })} · ${date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}`
 }
 
 function deviceInitials(category: string) {
@@ -206,21 +216,23 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Something went wrong. Please try again.'
 }
 
-function StatusPill({ status }: { status: string }) {
+function StatusPill({ status, lang = 'en' }: { status: string; lang?: DiagnosticLanguage }) {
   const normalized = status.replaceAll('_', '-')
+  const label = translations[lang]?.statuses[status] || statusNames[status as CaseStatus] || titleCase(status)
   return (
     <span className={`status-pill status-${normalized}`}>
       <span className="status-dot" />
-      {statusNames[status as CaseStatus] || titleCase(status)}
+      {label}
     </span>
   )
 }
 
-function PriorityPill({ priority }: { priority: string }) {
+function PriorityPill({ priority, lang = 'en' }: { priority: string; lang?: DiagnosticLanguage }) {
+  const label = translations[lang]?.priorities[priority] || priorityNames[priority as Priority] || titleCase(priority)
   return (
     <span className={`priority-pill priority-${priority}`}>
       {priority === 'urgent' && <AlertCircle size={12} />}
-      {priorityNames[priority as Priority] || titleCase(priority)}
+      {label}
     </span>
   )
 }
@@ -240,6 +252,7 @@ function ConfirmModal({
   title,
   message,
   confirmText,
+  cancelText = 'Cancel',
   confirmTone = 'primary',
   busy = false,
   onConfirm,
@@ -249,13 +262,14 @@ function ConfirmModal({
   title: string
   message: string
   confirmText: string
+  cancelText?: string
   confirmTone?: 'primary' | 'danger'
   busy?: boolean
   onConfirm: () => void
   onCancel: () => void
 }) {
   if (!isOpen) return null
-  return (
+  const modalContent = (
     <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onCancel() }}>
       <div className="modal-card confirm-modal-card" role="dialog" aria-modal="true">
         <div className="modal-head">
@@ -269,7 +283,7 @@ function ConfirmModal({
         </div>
         <div className="modal-actions">
           <button type="button" className="button button-ghost" onClick={onCancel} disabled={busy}>
-            Cancel
+            {cancelText}
           </button>
           <button
             type="button"
@@ -284,17 +298,22 @@ function ConfirmModal({
       </div>
     </div>
   )
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body)
+  }
+  return modalContent
 }
 
-function CreditsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+function CreditsModal({ isOpen, onClose, t }: { isOpen: boolean; onClose: () => void; t?: I18nCatalog }) {
   if (!isOpen) return null
-  return (
+  const modalContent = (
     <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="modal-card credits-modal-card" role="dialog" aria-modal="true">
         <div className="modal-head credits-modal-head">
           <div>
-            <span className="eyebrow">HACK DAY AT MICROSOFT</span>
-            <h2>Project Credits</h2>
+            <span className="eyebrow">{t?.creditsModal.eyebrow || 'HACK DAY AT MICROSOFT'}</span>
+            <h2>{t?.creditsModal.title || 'Project Credits'}</h2>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="Close">
             <X size={18} />
@@ -308,7 +327,7 @@ function CreditsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
                 <div className="member-card-header">
                   <div>
                     <span className={`member-role-tag ${member.isLead ? 'tag-lead' : ''}`}>
-                      {member.role}
+                      {member.isLead ? (t?.creditsModal.teamLeader || 'Team Leader') : (t?.creditsModal.engineer || 'Team Member')}
                     </span>
                     <a
                       href={member.linkedin}
@@ -361,6 +380,11 @@ function CreditsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
       </div>
     </div>
   )
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body)
+  }
+  return modalContent
 }
 
 function StandbyModal({
@@ -373,6 +397,8 @@ function StandbyModal({
   settings: AppSettings
 }) {
   if (!isOpen) return null
+
+  const tStandby = translations[settings.language]?.standby || translations.en.standby
 
   const handleForceClose = () => {
     playUiSound('click', settings)
@@ -391,13 +417,10 @@ function StandbyModal({
       <div className="standby-card">
         <div className="standby-status-row">
           <span className="standby-blinker" />
-          <span>SESSION SUSPENDED // WORKSPACE STANDBY</span>
+          <span>{tStandby.status}</span>
         </div>
-        <h2>Fixora Hardware OS Disengaged</h2>
-        <p>
-          Diagnostic matrix placed in safe standby mode. All repair logs and test data are stored safely.
-          You can close this tab using <kbd>Cmd+W</kbd> / <kbd>Ctrl+W</kbd> or click Close Tab below:
-        </p>
+        <h2>{tStandby.title}</h2>
+        <p>{tStandby.desc}</p>
         <div className="standby-actions">
           <button
             className="game-btn game-btn-primary"
@@ -407,7 +430,7 @@ function StandbyModal({
             }}
           >
             <span className="game-btn-num">&gt;&gt;</span>
-            <span className="game-btn-label">Resume Session</span>
+            <span className="game-btn-label">{tStandby.resume}</span>
             <span className="game-btn-bracket">]</span>
           </button>
           <button
@@ -415,7 +438,7 @@ function StandbyModal({
             onClick={handleForceClose}
           >
             <span className="game-btn-num">XX</span>
-            <span className="game-btn-label">Close Tab</span>
+            <span className="game-btn-label">{tStandby.closeTab}</span>
             <span className="game-btn-bracket">]</span>
           </button>
         </div>
@@ -481,7 +504,7 @@ function LightDiagnosticAwakening({
 
         <div className="reticle-telemetry-tag">
           <Zap size={11} fill="currentColor" />
-          <span>OPTICAL CALIBRATION // 100% FOCUS</span>
+          <span>{translations[settings.language]?.awakening.tag || 'OPTICAL CALIBRATION // 100% FOCUS'}</span>
         </div>
       </div>
     </div>
@@ -559,18 +582,28 @@ function CircuitMapOverlay({ animated }: { animated: boolean }) {
   )
 }
 
+function getCategoryIcon(cat: string) {
+  const c = (cat || '').toLowerCase()
+  if (c.includes('laptop') || c.includes('macbook') || c.includes('computer')) return Laptop
+  if (c.includes('tablet') || c.includes('ipad')) return Tablet
+  if (c.includes('audio') || c.includes('headphone') || c.includes('earbud')) return Headphones
+  return Smartphone
+}
+
 function SettingsModal({
   isOpen,
   settings,
   onUpdateSettings,
   onReplayBoot,
   onClose,
+  t,
 }: {
   isOpen: boolean
   settings: AppSettings
   onUpdateSettings: (updater: (prev: AppSettings) => AppSettings) => void
   onReplayBoot: () => void
   onClose: () => void
+  t: I18nCatalog
 }) {
   if (!isOpen) return null
 
@@ -584,13 +617,13 @@ function SettingsModal({
     onUpdateSettings(() => DEFAULT_SETTINGS)
   }
 
-  return (
+  const modalContent = (
     <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="modal-card settings-modal-card" role="dialog" aria-modal="true">
         <div className="modal-head settings-modal-head">
           <div className="settings-head-title">
-            <span className="eyebrow">SYSTEM CONFIGURATION</span>
-            <h2>Fixora Lab Settings</h2>
+            <span className="eyebrow">{t.settingsModal.eyebrow}</span>
+            <h2>{t.settingsModal.title}</h2>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="Close settings">
             <X size={18} />
@@ -598,17 +631,123 @@ function SettingsModal({
         </div>
 
         <div className="settings-modal-body">
-          {/* Section 1: Visual & Motion */}
+          {/* Section 1: Language & Voice Dialect */}
+          <div className="settings-section settings-section-highlight">
+            <div className="settings-section-head">
+              <Languages size={17} />
+              <div>
+                <h3>{t.settingsModal.langLabel}</h3>
+                <span className="settings-section-desc">{t.settingsModal.langDesc}</span>
+              </div>
+            </div>
+
+            <div className="settings-lang-segmented-bar">
+              <button
+                type="button"
+                className={`lang-segment-btn ${settings.language === 'en' ? 'active' : ''}`}
+                onClick={() => {
+                  playUiSound('toggle', settings)
+                  onUpdateSettings((prev) => ({ ...prev, language: 'en' }))
+                }}
+              >
+                <span className="segment-code">EN</span>
+                <span className="segment-title">{t.settingsModal.optEn}</span>
+              </button>
+              <button
+                type="button"
+                className={`lang-segment-btn ${settings.language === 'hi' ? 'active' : ''}`}
+                onClick={() => {
+                  playUiSound('toggle', settings)
+                  onUpdateSettings((prev) => ({ ...prev, language: 'hi' }))
+                }}
+              >
+                <span className="segment-code">हिन्दी</span>
+                <span className="segment-title">{t.settingsModal.optHi}</span>
+              </button>
+              <button
+                type="button"
+                className={`lang-segment-btn ${settings.language === 'hi-Latn' ? 'active' : ''}`}
+                onClick={() => {
+                  playUiSound('toggle', settings)
+                  onUpdateSettings((prev) => ({ ...prev, language: 'hi-Latn' }))
+                }}
+              >
+                <span className="segment-code">Hinglish</span>
+                <span className="segment-title">{t.settingsModal.optHiLatn}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Section 2: AI & Diagnostic Engine */}
           <div className="settings-section">
             <div className="settings-section-head">
-              <Sparkles size={16} />
-              <h3>Visual FX & Animations</h3>
+              <Cpu size={17} />
+              <div>
+                <h3>{t.settingsModal.secEngine}</h3>
+                <span className="settings-section-desc">{t.settingsModal.engineDesc}</span>
+              </div>
+            </div>
+
+            <div className="settings-engine-grid">
+              {[
+                { id: 'flash-turbo' as const, name: t.settingsModal.engineFlashTurbo, badge: 'FASTEST ~1.2s', desc: 'Ultra-low latency streaming for rapid bench triage' },
+                { id: 'gemini-flash' as const, name: t.settingsModal.engineFlash, badge: 'BALANCED', desc: 'High diagnostic depth & precision reasoning' },
+                { id: 'gemma-4' as const, name: t.settingsModal.engineGemma, badge: 'BENCH MODEL', desc: 'Open architecture with auto turbo acceleration' },
+                { id: 'fallback-rules' as const, name: t.settingsModal.engineRules, badge: 'OFFLINE RULES', desc: 'Deterministic hardware schematics & rail checklists' },
+              ].map((engine) => {
+                const isSelected = settings.modelEngine === engine.id
+                return (
+                  <button
+                    key={engine.id}
+                    type="button"
+                    className={`settings-engine-card ${isSelected ? 'active' : ''}`}
+                    onClick={() => {
+                      playUiSound('toggle', settings)
+                      onUpdateSettings((prev) => ({ ...prev, modelEngine: engine.id }))
+                    }}
+                  >
+                    <div className="engine-card-header">
+                      <span className="engine-card-name">{engine.name}</span>
+                      <span className="engine-card-badge">{engine.badge}</span>
+                    </div>
+                    <p className="engine-card-desc">{engine.desc}</p>
+                    {isSelected && <span className="engine-active-dot" />}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Gemma 4 Turbo Acceleration Toggle */}
+            <div className="settings-row" style={{ marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px dashed var(--glass-border)' }}>
+              <div className="settings-text">
+                <span className="settings-label">{t.settingsModal.accelLabel}</span>
+                <span className="settings-desc">
+                  {settings.aiAcceleration ? t.settingsModal.accelOn : t.settingsModal.accelOff} — {t.settingsModal.accelDesc}
+                </span>
+              </div>
+              <label className="switch-label">
+                <input
+                  type="checkbox"
+                  className="switch-input"
+                  checked={settings.aiAcceleration}
+                  onChange={() => toggle('aiAcceleration')}
+                />
+                <span className="switch-slider" />
+              </label>
+            </div>
+          </div>
+
+          {/* Section 3: Visual & Motion Telemetry */}
+          <div className="settings-section">
+            <div className="settings-section-head">
+              <Sparkles size={17} />
+              <h3>{t.settingsModal.secDisplay}</h3>
             </div>
 
             <div className="settings-row">
               <div className="settings-text">
-                <span className="settings-label">Enable Animations & Circuit FX</span>
-                <span className="settings-desc">Master toggle for background neon circuit traces, laser scanline, radar ripples, and button micro-interactions.</span>
+                <span className="settings-label">{t.settingsModal.animLabel}</span>
+                <span className="settings-desc">{t.settingsModal.animDesc}</span>
               </div>
               <label className="switch-label">
                 <input
@@ -623,8 +762,8 @@ function SettingsModal({
 
             <div className="settings-row">
               <div className="settings-text">
-                <span className="settings-label">Live Telemetry Oscilloscope</span>
-                <span className="settings-desc">Display animated hardware frequency waveform & system telemetry in the HUD.</span>
+                <span className="settings-label">{t.settingsModal.oscLabel}</span>
+                <span className="settings-desc">{t.settingsModal.oscDesc}</span>
               </div>
               <label className="switch-label">
                 <input
@@ -639,8 +778,8 @@ function SettingsModal({
 
             <div className="settings-row">
               <div className="settings-text">
-                <span className="settings-label">High-Contrast Glass HUD</span>
-                <span className="settings-desc">Enhances contrast and panel outlines for bright workshop lighting.</span>
+                <span className="settings-label">{t.settingsModal.contrastLabel}</span>
+                <span className="settings-desc">{t.settingsModal.contrastDesc}</span>
               </div>
               <label className="switch-label">
                 <input
@@ -662,40 +801,22 @@ function SettingsModal({
                   onReplayBoot()
                 }}
               >
-                <RotateCcw size={13} /> Replay Optical Calibration Sequence
+                <RotateCcw size={13} /> {t.settingsModal.replayCalibration}
               </button>
             </div>
           </div>
 
-          {/* Section 2: AI & Diagnostic Engine */}
+          {/* Section 4: Workshop Workflow & Safety Guardrails */}
           <div className="settings-section">
             <div className="settings-section-head">
-              <Cpu size={16} />
-              <h3>AI & Reasoning Engine</h3>
+              <ShieldCheck size={17} />
+              <h3>{t.settingsModal.secWorkflow}</h3>
             </div>
 
             <div className="settings-row">
               <div className="settings-text">
-                <span className="settings-label">Diagnostics Inference Model</span>
-                <span className="settings-desc">Choose between live Gemma 4 reasoning API or offline heuristic rules.</span>
-              </div>
-              <select
-                className="settings-select"
-                value={settings.modelEngine}
-                onChange={(e) => {
-                  playUiSound('toggle', settings)
-                  onUpdateSettings((prev) => ({ ...prev, modelEngine: e.target.value as 'gemma-4' | 'fallback-rules' }))
-                }}
-              >
-                <option value="gemma-4">Gemma 4 (26B Reasoning Matrix)</option>
-                <option value="fallback-rules">Rule-based Local Engine</option>
-              </select>
-            </div>
-
-            <div className="settings-row">
-              <div className="settings-text">
-                <span className="settings-label">Automatic AI Triage on Intake</span>
-                <span className="settings-desc">Instantly evaluate fault probability and generate test matrix when a device is registered.</span>
+                <span className="settings-label">{t.settingsModal.autoTriageLabel}</span>
+                <span className="settings-desc">{t.settingsModal.autoTriageDesc}</span>
               </div>
               <label className="switch-label">
                 <input
@@ -710,8 +831,8 @@ function SettingsModal({
 
             <div className="settings-row">
               <div className="settings-text">
-                <span className="settings-label">Strict Safety Quarantine</span>
-                <span className="settings-desc">Enforce mandatory pause on thermal runaway or punctured battery hazards.</span>
+                <span className="settings-label">{t.settingsModal.safetyLabel}</span>
+                <span className="settings-desc">{t.settingsModal.safetyDesc}</span>
               </div>
               <label className="switch-label">
                 <input
@@ -723,19 +844,11 @@ function SettingsModal({
                 <span className="switch-slider" />
               </label>
             </div>
-          </div>
-
-          {/* Section 3: Safety & Queue Prompts */}
-          <div className="settings-section">
-            <div className="settings-section-head">
-              <ShieldCheck size={16} />
-              <h3>Queue Safety & Handover</h3>
-            </div>
 
             <div className="settings-row">
               <div className="settings-text">
-                <span className="settings-label">Confirm Device Deletion</span>
-                <span className="settings-desc">Require confirmation prompt before permanently deleting any repair record.</span>
+                <span className="settings-label">{t.settingsModal.confirmDeleteLabel}</span>
+                <span className="settings-desc">{t.settingsModal.confirmDeleteDesc}</span>
               </div>
               <label className="switch-label">
                 <input
@@ -750,8 +863,8 @@ function SettingsModal({
 
             <div className="settings-row">
               <div className="settings-text">
-                <span className="settings-label">Confirm Repair Completion</span>
-                <span className="settings-desc">Require confirmation before setting a device as completed and archiving to memory.</span>
+                <span className="settings-label">{t.settingsModal.confirmCompleteLabel}</span>
+                <span className="settings-desc">{t.settingsModal.confirmCompleteDesc}</span>
               </div>
               <label className="switch-label">
                 <input
@@ -766,8 +879,8 @@ function SettingsModal({
 
             <div className="settings-row">
               <div className="settings-text">
-                <span className="settings-label">Auto-Archive Completed Repairs</span>
-                <span className="settings-desc">Keep the repair queue focused by filtering completed devices into Repair Memory.</span>
+                <span className="settings-label">{t.settingsModal.autoArchiveLabel}</span>
+                <span className="settings-desc">{t.settingsModal.autoArchiveDesc}</span>
               </div>
               <label className="switch-label">
                 <input
@@ -781,17 +894,17 @@ function SettingsModal({
             </div>
           </div>
 
-          {/* Section 4: Audio Haptics */}
+          {/* Section 5: Audio Haptics */}
           <div className="settings-section">
             <div className="settings-section-head">
-              {settings.audioEffects ? <Volume2 size={16} /> : <VolumeX size={16} />}
-              <h3>Hardware Audio Feedback</h3>
+              {settings.audioEffects ? <Volume2 size={17} /> : <VolumeX size={17} />}
+              <h3>{t.settingsModal.secAudio}</h3>
             </div>
 
             <div className="settings-row">
               <div className="settings-text">
-                <span className="settings-label">Synthesizer Audio Feedback</span>
-                <span className="settings-desc">Play clean browser-synthesized audio clicks on button presses and toggles.</span>
+                <span className="settings-label">{t.settingsModal.audioLabel}</span>
+                <span className="settings-desc">{t.settingsModal.audioDesc}</span>
               </div>
               <label className="switch-label">
                 <input
@@ -812,7 +925,7 @@ function SettingsModal({
             className="button button-ghost"
             onClick={resetDefaults}
           >
-            Restore Defaults
+            {t.settingsModal.resetBtn}
           </button>
           <button
             type="button"
@@ -822,22 +935,200 @@ function SettingsModal({
               onClose()
             }}
           >
-            Save & Close
+            {t.settingsModal.closeBtn}
           </button>
         </div>
       </div>
     </div>
   )
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body)
+  }
+  return modalContent
+}
+
+function DeviceSelectionModal({
+  isOpen,
+  cases,
+  selectedId,
+  onSelect,
+  onClose,
+  t,
+  settings,
+}: {
+  isOpen: boolean
+  cases: RepairCase[]
+  selectedId: string | null
+  onSelect: (id: string) => void
+  onClose: () => void
+  t: I18nCatalog
+  settings?: AppSettings
+}) {
+  const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
+
+  if (!isOpen) return null
+
+  const filtered = cases.filter((c) => {
+    if (categoryFilter !== 'all' && c.device_category.toLowerCase() !== categoryFilter.toLowerCase()) {
+      return false
+    }
+    if (!search.trim()) return true
+    const q = search.toLowerCase()
+    return (
+      c.id.toLowerCase().includes(q) ||
+      c.brand.toLowerCase().includes(q) ||
+      c.model.toLowerCase().includes(q) ||
+      c.issue_title.toLowerCase().includes(q) ||
+      c.symptoms.toLowerCase().includes(q)
+    )
+  })
+
+  const rawCategories = Array.from(new Set(cases.map((c) => c.device_category).filter(Boolean)))
+  const categories = ['all', ...rawCategories]
+
+  const modalContent = (
+    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal-card device-selection-card" role="dialog" aria-modal="true">
+        <div className="modal-head device-modal-head">
+          <div className="device-modal-title-wrap">
+            <span className="eyebrow">{t.diagnostics.telemetry}</span>
+            <h2>{t.diagnostics.deviceModalTitle}</h2>
+            <p className="device-modal-sub">{t.diagnostics.deviceModalSub}</p>
+          </div>
+          <button className="icon-button" onClick={onClose} aria-label="Close modal">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="device-modal-toolbar">
+          <div className="device-search-wrap">
+            <Search size={15} className="search-icon" />
+            <input
+              type="text"
+              className="device-search-input"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t.diagnostics.deviceModalSearch}
+              autoFocus
+            />
+            {search && (
+              <button className="clear-search-btn" onClick={() => setSearch('')}>
+                <X size={13} />
+              </button>
+            )}
+          </div>
+
+          <div className="device-category-pills">
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                className={`category-pill ${categoryFilter.toLowerCase() === cat.toLowerCase() ? 'active' : ''}`}
+                onClick={() => {
+                  if (settings) playUiSound('toggle', settings)
+                  setCategoryFilter(cat)
+                }}
+              >
+                {cat === 'all' ? t.cases.allStatuses || 'All' : cat}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="device-modal-grid">
+          {filtered.length === 0 ? (
+            <div className="device-modal-empty">
+              <Stethoscope size={36} className="empty-icon" />
+              <h4>{t.diagnostics.deviceModalNoResults}</h4>
+              <p>{t.cases.emptyDesc}</p>
+            </div>
+          ) : (
+            filtered.map((item) => {
+              const isSelected = item.id === selectedId
+              const CategoryIcon = getCategoryIcon(item.device_category)
+              return (
+                <div
+                  key={item.id}
+                  className={`device-card-item ${isSelected ? 'is-selected' : ''}`}
+                  onClick={() => {
+                    if (settings) playUiSound('click', settings)
+                    onSelect(item.id)
+                    onClose()
+                  }}
+                  tabIndex={0}
+                  role="button"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      if (settings) playUiSound('click', settings)
+                      onSelect(item.id)
+                      onClose()
+                    }
+                  }}
+                >
+                  <div className="device-card-top">
+                    <div className="device-card-identity">
+                      <div className="device-cat-icon">
+                        <CategoryIcon size={18} />
+                      </div>
+                      <div>
+                        <span className="device-case-id">{item.id}</span>
+                        <h4 className="device-brand-model">{item.brand} {item.model}</h4>
+                      </div>
+                    </div>
+                    <div className="device-card-badges">
+                      <PriorityPill priority={item.priority} lang={settings?.language} />
+                      <StatusPill status={item.status} lang={settings?.language} />
+                    </div>
+                  </div>
+
+                  <div className="device-card-issue">
+                    <span className="issue-label">{t.diagnostics.symptoms}:</span>
+                    <p className="issue-text">{tContent(item.issue_title, settings?.language)}</p>
+                  </div>
+
+                  <div className="device-card-footer">
+                    <span className="device-test-count">
+                      <Activity size={12} /> {item.test_count || 0} {t.diagnostics.tests}
+                    </span>
+                    {isSelected ? (
+                      <span className="device-selected-indicator">
+                        <Check size={13} /> {t.diagnostics.deviceModalActive}
+                      </span>
+                    ) : (
+                      <span className="device-select-action">
+                        {t.diagnostics.selectDevice} <ArrowRight size={12} />
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  )
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body)
+  }
+  return modalContent
 }
 
 function NewRepairModal({
   onClose,
   onCreate,
   busy,
+  t,
+  settings,
 }: {
   onClose: () => void
   onCreate: (data: Record<string, string>) => Promise<void>
   busy: boolean
+  t?: I18nCatalog
+  settings?: AppSettings
 }) {
   const [form, setForm] = useState({
     device_category: 'Smartphone',
@@ -848,6 +1139,7 @@ function NewRepairModal({
     priority: 'normal',
     customer_contact: '',
     estimated_minutes: '30',
+    suspected_component: '',
   })
   const [localError, setLocalError] = useState('')
   const setField = (key: string, value: string) => setForm((current) => ({ ...current, [key]: value }))
@@ -856,69 +1148,250 @@ function NewRepairModal({
     event.preventDefault()
     setLocalError('')
     if (form.symptoms.trim().length < 5) {
-      setLocalError('Add more detail about the reported symptoms.')
+      setLocalError(t?.intake.errorSymptomsShort || 'Add more detail about the reported symptoms.')
       return
     }
     await onCreate(form)
   }
 
-  return (
+  const categoryOptions = [
+    { id: 'Smartphone', label: t?.intake.categories.Smartphone || 'Smartphone', icon: Smartphone },
+    { id: 'Laptop', label: t?.intake.categories.Laptop || 'Laptop', icon: Laptop },
+    { id: 'Desktop', label: t?.intake.categories.Desktop || 'Desktop', icon: Cpu },
+    { id: 'Tablet', label: t?.intake.categories.Tablet || 'Tablet', icon: Tablet },
+    { id: 'Other electronics', label: t?.intake.categories['Other electronics'] || 'Other', icon: Zap },
+  ]
+
+  const priorityOptions = [
+    { id: 'low', label: t?.priorities.low || 'Low', cls: 'pri-low' },
+    { id: 'normal', label: t?.priorities.normal || 'Normal', cls: 'pri-normal' },
+    { id: 'high', label: t?.priorities.high || 'High', cls: 'pri-high' },
+    { id: 'urgent', label: t?.priorities.urgent || 'Urgent', cls: 'pri-urgent' },
+  ]
+
+  const diagnosticPresets = [
+    {
+      label: '⚡ No Power / Dead 5V Rail',
+      issue: 'Device does not turn on / dead 5V rail',
+      symptoms: 'Zero current draw on USB bench meter (0.00A). Board remains cold; short circuit or open fuse suspected on main power rail.',
+      part: 'Primary PMIC / Charging IC',
+    },
+    {
+      label: '🔌 Intermittent Port Drop',
+      issue: 'Charging disconnects intermittently',
+      symptoms: 'Charging negotiation drops when cable angle shifts. Port pin wear and CC line diode drop verification needed.',
+      part: 'USB-C Charging Sub-Board',
+    },
+    {
+      label: '🖥️ Dark Screen / Backlight Fault',
+      issue: 'Display dark / backlight circuit fault',
+      symptoms: 'Device vibrates and boots with audio chime but display panel stays dark. Backlight boost circuit or flex check required.',
+      part: 'AMOLED / LCD Display Flex',
+    },
+    {
+      label: '🔋 Battery Heat / Swelling',
+      issue: 'Excessive warmth while charging',
+      symptoms: 'Unusual heat concentrated around battery cell during charge. Swelling check and internal impedance verification required.',
+      part: 'Lithium-Ion Battery Cell',
+    },
+    {
+      label: '❄️ System Freeze / Logic Board Hang',
+      issue: 'Hangs on boot / logic board stall',
+      symptoms: 'Device powers on but hangs at initial splash or desktop; keyboard and cursor unresponsive. Secondary voltage rail drop suspected.',
+      part: 'Logic Board / NAND Controller',
+    },
+  ]
+
+  const modalContent = (
     <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="new-repair-title">
-        <div className="modal-head">
-          <div>
-            <h2 id="new-repair-title">Register device</h2>
+      <div className="modal-card intake-modal-card" role="dialog" aria-modal="true" aria-labelledby="new-repair-title">
+        <div className="modal-head intake-modal-head">
+          <div className="intake-head-title">
+            <span className="eyebrow">
+              <span className="live-status-dot" />
+              INTAKE TERMINAL // BENCH CASE REGISTRATION
+            </span>
+            <h2 id="new-repair-title">{t?.intake.title || 'New Repair Case Registration'}</h2>
           </div>
           <button className="icon-button" type="button" onClick={onClose} aria-label="Close">
             <X size={18} />
           </button>
         </div>
-        <form className="modal-form" onSubmit={submit}>
+
+        <form className="modal-form intake-modal-form" onSubmit={submit}>
+          {/* Step 1: Device Category Selection Cards */}
+          <div className="intake-section">
+            <label className="intake-section-label">{t?.intake.category || 'Device Category'}</label>
+            <div className="intake-category-grid">
+              {categoryOptions.map((cat) => {
+                const Icon = cat.icon
+                const isSelected = form.device_category === cat.id
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    className={`intake-cat-card ${isSelected ? 'active' : ''}`}
+                    onClick={() => {
+                      playUiSound('toggle', settings || DEFAULT_SETTINGS)
+                      setField('device_category', cat.id)
+                    }}
+                  >
+                    <Icon size={18} />
+                    <span>{cat.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Step 2: One-Click Quick Presets */}
+          <div className="intake-presets-box">
+            <span className="intake-presets-title">
+              <Sparkles size={13} />
+              {t?.intake.quickPresets || 'Diagnostic Presets'}:
+            </span>
+            <div className="intake-presets-list">
+              {diagnosticPresets.map((preset, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  className="intake-preset-pill"
+                  onClick={() => {
+                    playUiSound('click', settings || DEFAULT_SETTINGS)
+                    setField('issue_title', preset.issue)
+                    setField('symptoms', preset.symptoms)
+                    if (preset.part && !form.suspected_component) {
+                      setField('suspected_component', preset.part)
+                    }
+                  }}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Step 3: Hardware Specifications */}
           <div className="form-grid two-cols">
-            <label>Device category
-              <select value={form.device_category} onChange={(e) => setField('device_category', e.target.value)}>
-                <option>Smartphone</option>
-                <option>Laptop</option>
-                <option>Desktop</option>
-                <option>Tablet</option>
-                <option>Other electronics</option>
-              </select>
+            <label>
+              {t?.intake.brand || 'Hardware Brand'} *
+              <input
+                required
+                maxLength={80}
+                value={form.brand}
+                onChange={(e) => setField('brand', e.target.value)}
+                placeholder={t?.intake.brandPlaceholder || 'e.g. Samsung, Apple, Lenovo'}
+              />
             </label>
-            <label>Priority
-              <select value={form.priority} onChange={(e) => setField('priority', e.target.value)}>
-                <option value="low">Low</option>
-                <option value="normal">Normal</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
-              </select>
-            </label>
-            <label>Brand
-              <input required maxLength={80} value={form.brand} onChange={(e) => setField('brand', e.target.value)} placeholder="e.g. Samsung" />
-            </label>
-            <label>Model
-              <input required maxLength={100} value={form.model} onChange={(e) => setField('model', e.target.value)} placeholder="e.g. Galaxy A54" />
-            </label>
-            <label className="span-two">Reported issue
-              <input required minLength={4} maxLength={160} value={form.issue_title} onChange={(e) => setField('issue_title', e.target.value)} placeholder="e.g. Charging disconnects intermittently" />
-            </label>
-            <label className="span-two">Reported symptoms
-              <textarea required minLength={5} rows={3} value={form.symptoms} onChange={(e) => setField('symptoms', e.target.value)} placeholder="What was observed?" />
-            </label>
-            <label className="span-two">Customer contact <span className="label-muted">(phone or email)</span>
-              <input value={form.customer_contact} onChange={(e) => setField('customer_contact', e.target.value)} placeholder="+1 (555) 000-0000 or customer@example.com" />
+            <label>
+              {t?.intake.model || 'Model / Revision'} *
+              <input
+                required
+                maxLength={100}
+                value={form.model}
+                onChange={(e) => setField('model', e.target.value)}
+                placeholder={t?.intake.modelPlaceholder || 'e.g. Galaxy A54, MacBook Air M2'}
+              />
             </label>
           </div>
-          {localError && <div className="inline-error"><AlertCircle size={15} />{localError}</div>}
-          <div className="modal-actions">
-            <button type="button" className="button button-ghost" onClick={onClose}>Cancel</button>
+
+          {/* Step 4: Reported Issue & Detailed Symptoms */}
+          <div className="form-grid">
+            <label>
+              {t?.intake.issueTitle || 'Reported Issue Summary'} *
+              <input
+                required
+                minLength={4}
+                maxLength={160}
+                value={form.issue_title}
+                onChange={(e) => setField('issue_title', e.target.value)}
+                placeholder={t?.intake.issuePlaceholder || 'e.g. Charging disconnects intermittently'}
+              />
+            </label>
+
+            <label>
+              {t?.intake.symptoms || 'Detailed Observations / Telemetry'} *
+              <textarea
+                required
+                minLength={5}
+                rows={3}
+                value={form.symptoms}
+                onChange={(e) => setField('symptoms', e.target.value)}
+                placeholder={t?.intake.symptomsPlaceholder || 'What was observed during intake? Include rail voltages or physical signs if noted.'}
+              />
+            </label>
+          </div>
+
+          {/* Step 5: Phase 1 Component Health Tracker Integration */}
+          <div className="intake-component-seed-box">
+            <label>
+              <Cpu size={14} />
+              {t?.intake.suspectedPart || 'Suspected Component (Phase 1 Tracker)'}
+              <span className="label-muted">· Auto-initializes component health tracking</span>
+            </label>
+            <input
+              value={form.suspected_component}
+              onChange={(e) => setField('suspected_component', e.target.value)}
+              placeholder="e.g. USB-C Charging Sub-Board, Battery Pack, Display Module, Power PMIC..."
+            />
+          </div>
+
+          {/* Step 6: Priority & Customer Contact */}
+          <div className="form-grid two-cols">
+            <div>
+              <label className="intake-sublabel">{t?.intake.priority || 'Priority Level'}</label>
+              <div className="intake-priority-bar">
+                {priorityOptions.map((pri) => (
+                  <button
+                    key={pri.id}
+                    type="button"
+                    className={`intake-pri-btn ${pri.cls} ${form.priority === pri.id ? 'active' : ''}`}
+                    onClick={() => {
+                      playUiSound('toggle', settings || DEFAULT_SETTINGS)
+                      setField('priority', pri.id)
+                    }}
+                  >
+                    <span>{pri.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <label>
+              {t?.intake.customerContact || 'Customer Contact'} <span className="label-muted">{t?.intake.contactHint || '(phone or email)'}</span>
+              <input
+                value={form.customer_contact}
+                onChange={(e) => setField('customer_contact', e.target.value)}
+                placeholder={t?.intake.contactPlaceholder || '+91 98765 43210 or user@example.com'}
+              />
+            </label>
+          </div>
+
+          {localError && (
+            <div className="inline-error">
+              <AlertCircle size={15} />
+              {localError}
+            </div>
+          )}
+
+          <div className="modal-actions intake-modal-actions">
+            <button type="button" className="button button-ghost" onClick={onClose}>
+              {t?.intake.cancel || 'Cancel'}
+            </button>
             <button type="submit" className="button button-primary" disabled={busy}>
-              {busy ? <LoaderCircle className="spin" size={16} /> : <Plus size={16} />} Register device
+              {busy ? <LoaderCircle className="spin" size={16} /> : <Plus size={16} />}
+              <span>{busy ? (t?.intake.creating || 'Registering…') : (t?.intake.register || 'Register Device')}</span>
             </button>
           </div>
         </form>
       </div>
     </div>
   )
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body)
+  }
+  return modalContent
 }
 
 /**
@@ -933,6 +1406,7 @@ function HomePage({
   onOpenSettings,
   onQuit,
   settings,
+  t,
 }: {
   onNavigate: (tab: NavId) => void
   onNewRepair: () => void
@@ -940,6 +1414,7 @@ function HomePage({
   onOpenSettings: () => void
   onQuit: () => void
   settings: AppSettings
+  t: I18nCatalog
 }) {
   return (
     <div className="home-hero-page">
@@ -978,7 +1453,7 @@ function HomePage({
         <div className="game-hud-top">
           <div className="game-hud-badge">
             <span className="hud-blinker" />
-            <span>SYS.STATUS // ONLINE</span>
+            <span>{t.home.status}</span>
           </div>
           {settings.hardwareTelemetry && (
             <div className="game-hud-telemetry">
@@ -989,7 +1464,7 @@ function HomePage({
                 <span className="telemetry-bar bar-4" />
                 <span className="telemetry-bar bar-5" />
               </div>
-              <span>GEMMA 4 // REASONING MATRIX</span>
+              <span>{t.home.matrix}</span>
             </div>
           )}
         </div>
@@ -997,13 +1472,13 @@ function HomePage({
         <div className="game-title-wrap">
           <div className="game-title-eyebrow">
             <Zap size={14} className="hud-bolt" />
-            <span>ELECTRONICS REPAIR INTELLIGENCE</span>
+            <span>{t.home.eyebrow}</span>
           </div>
           <h1 className="game-main-title">
-            FIXORA<span className="game-title-dot">.AI</span>
+            REVIX<span className="game-title-dot">.AI</span>
           </h1>
           <p className="game-tagline">
-            Grounded diagnostic co-pilot for electronics repair & fault verification.
+            {t.home.tagline}
           </p>
         </div>
 
@@ -1018,7 +1493,7 @@ function HomePage({
             }}
           >
             <span className="game-btn-num">01</span>
-            <span className="game-btn-label">New Repair</span>
+            <span className="game-btn-label">{t.home.menuNew}</span>
             <span className="game-btn-bracket">]</span>
           </button>
 
@@ -1031,7 +1506,7 @@ function HomePage({
             }}
           >
             <span className="game-btn-num">02</span>
-            <span className="game-btn-label">Overview</span>
+            <span className="game-btn-label">{t.home.menuOverview}</span>
             <span className="game-btn-bracket">]</span>
           </button>
 
@@ -1044,7 +1519,7 @@ function HomePage({
             }}
           >
             <span className="game-btn-num">03</span>
-            <span className="game-btn-label">Repair Queue</span>
+            <span className="game-btn-label">{t.home.menuQueue}</span>
             <span className="game-btn-bracket">]</span>
           </button>
 
@@ -1053,11 +1528,11 @@ function HomePage({
             style={{ '--btn-idx': 4 } as React.CSSProperties}
             onClick={() => {
               playUiSound('click', settings)
-              onOpenSettings()
+              onNavigate('components')
             }}
           >
             <span className="game-btn-num">04</span>
-            <span className="game-btn-label">Settings</span>
+            <span className="game-btn-label">{t.home.menuComponents}</span>
             <span className="game-btn-bracket">]</span>
           </button>
 
@@ -1066,28 +1541,41 @@ function HomePage({
             style={{ '--btn-idx': 5 } as React.CSSProperties}
             onClick={() => {
               playUiSound('click', settings)
-              onOpenCredits()
+              onOpenSettings()
             }}
           >
             <span className="game-btn-num">05</span>
-            <span className="game-btn-label">Credits</span>
+            <span className="game-btn-label">{t.home.menuSettings}</span>
+            <span className="game-btn-bracket">]</span>
+          </button>
+
+          <button
+            className="game-btn"
+            style={{ '--btn-idx': 6 } as React.CSSProperties}
+            onClick={() => {
+              playUiSound('click', settings)
+              onOpenCredits()
+            }}
+          >
+            <span className="game-btn-num">06</span>
+            <span className="game-btn-label">{t.home.menuCredits}</span>
             <span className="game-btn-bracket">]</span>
           </button>
 
           <button
             className="game-btn game-btn-quit"
-            style={{ '--btn-idx': 6 } as React.CSSProperties}
+            style={{ '--btn-idx': 7 } as React.CSSProperties}
             onClick={onQuit}
           >
-            <span className="game-btn-num">06</span>
-            <span className="game-btn-label">Quit Site</span>
+            <span className="game-btn-num">07</span>
+            <span className="game-btn-label">{t.home.menuQuit}</span>
             <span className="game-btn-bracket">]</span>
           </button>
         </nav>
 
         <div className="game-hud-bottom">
           <span className="hud-code-hint">
-            HACK DAY AT MICROSOFT // GEMMA 4 REPAIR COPILOT
+            {t.home.footerHint}
           </span>
         </div>
       </div>
@@ -1108,8 +1596,11 @@ export default function App() {
   })
   const [showSettings, setShowSettings] = useState(false)
   const [isBooting, setIsBooting] = useState(() => {
-    return !sessionStorage.getItem('fixora_booted_session')
+    return !sessionStorage.getItem('revix_booted_session')
   })
+
+  // Reactive whole-application internationalization catalog
+  const t: I18nCatalog = translations[settings.language] || translations.en
 
   useEffect(() => {
     try {
@@ -1134,7 +1625,7 @@ export default function App() {
 
   // Default to 'home' landing page
   const [activeNav, setActiveNav] = useState<NavId>('home')
-  const [diagnosticsTab, setDiagnosticsTab] = useState<'evidence' | 'recommendation'>('evidence')
+  const [diagnosticsTab, setDiagnosticsTab] = useState<'evidence' | 'components' | 'recommendation'>('evidence')
   const [cases, setCases] = useState<RepairCase[]>([])
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null)
   const [health, setHealth] = useState<Health | null>(null)
@@ -1275,6 +1766,7 @@ export default function App() {
         priority: form.priority,
         customer_contact: form.customer_contact || undefined,
         estimated_minutes: form.estimated_minutes ? Number(form.estimated_minutes) : null,
+        suspected_component: form.suspected_component || undefined,
       })
       setShowNewRepair(false)
       setSelectedId(created.id)
@@ -1286,7 +1778,7 @@ export default function App() {
       // Automatic AI Triage if enabled in Settings
       if (settings.autoTriageOnCreate) {
         setGenerating(true)
-        void api.recommendation(created.id)
+        void api.recommendation(created.id, settings.modelEngine, settings.language, settings.aiAcceleration)
           .then((rec) => {
             setRecommendation(rec)
             void loadDetail(created.id)
@@ -1360,13 +1852,29 @@ export default function App() {
   async function generateRecommendation() {
     if (!selectedDetail) return
     setGenerating(true)
+    const startTime = performance.now()
     try {
-      const result = await api.recommendation(selectedDetail.id)
+      const result = await api.recommendation(selectedDetail.id, settings.modelEngine, settings.language, settings.aiAcceleration)
+      const elapsedSec = ((performance.now() - startTime) / 1000).toFixed(1)
       setRecommendation(result)
-      await refreshLists()
-      await loadDetail(selectedDetail.id)
+      await Promise.all([
+        refreshLists(),
+        loadDetail(selectedDetail.id),
+      ])
       setRecommendation((current) => (current ? { ...current, similar_cases: result.similar_cases } : result))
-      flash('success', result.provider === 'gemini_api' ? 'Gemma recommendation generated.' : 'Guidance generated using local rules.')
+      const engineLabel =
+        result.provider === 'rule_based_fallback'
+          ? 'Local rules'
+          : result.model_name.includes('flash')
+          ? 'Turbo Flash'
+          : 'Gemma 4'
+      const langLabel =
+        settings.language === 'hi'
+          ? ' · हिन्दी'
+          : settings.language === 'hi-Latn'
+          ? ' · Hinglish'
+          : ''
+      flash('success', `Diagnostic generated in ${elapsedSec}s via ${engineLabel}${langLabel}.`)
     } catch (error) {
       flash('error', errorMessage(error))
     } finally {
@@ -1516,6 +2024,7 @@ export default function App() {
               }}
               onQuit={handleQuitSite}
               settings={settings}
+              t={t}
             />
           </div>
         )}
@@ -1532,6 +2041,7 @@ export default function App() {
               }}
               settings={settings}
               aiActive={aiActive}
+              t={t}
             />
           </div>
         )}
@@ -1554,6 +2064,7 @@ export default function App() {
               onStatus={handleStatusChange}
               onDelete={promptDeleteDevice}
               settings={settings}
+              t={t}
             />
           </div>
         )}
@@ -1581,7 +2092,27 @@ export default function App() {
               onSaveOutcome={handleSaveOutcome}
               onDelete={promptDeleteDevice}
               onOpenCase={openCase}
+              onReloadDetail={async () => {
+                if (selectedId) await loadDetail(selectedId)
+              }}
+              onNavigateComponents={() => setActiveNav('components')}
               settings={settings}
+              onUpdateSettings={setSettings}
+              flash={flash}
+              t={t}
+            />
+          </div>
+        )}
+
+        {!isHome && activeNav === 'components' && (
+          <div key="components" className="page-transition-wrap components-fullscreen-wrap">
+            <ComponentsPage
+              settings={settings}
+              t={t}
+              onNavigateCase={(caseId) => {
+                openCase(caseId)
+              }}
+              flash={flash}
             />
           </div>
         )}
@@ -1595,6 +2126,7 @@ export default function App() {
               onOpen={openCase}
               onDelete={promptDeleteDevice}
               settings={settings}
+              t={t}
             />
           </div>
         )}
@@ -1608,6 +2140,7 @@ export default function App() {
               const Icon = item.icon
               const isActive = activeNav === item.id
               const count = item.id === 'cases' ? activeQueueCases.length : null
+              const tooltipLabel = t.nav[item.id] || item.label
               return (
                 <button
                   key={item.id}
@@ -1616,9 +2149,9 @@ export default function App() {
                     playUiSound('click', settings)
                     setActiveNav(item.id)
                   }}
-                  aria-label={item.label}
+                  aria-label={tooltipLabel}
                 >
-                  <span className="dock-tooltip">{item.label}</span>
+                  <span className="dock-tooltip">{tooltipLabel}</span>
                   <div className="dock-icon-wrap">
                     <Icon size={22} strokeWidth={isActive ? 2.3 : 1.8} />
                     {count !== null && count > 0 && <span className="dock-badge">{count}</span>}
@@ -1633,12 +2166,12 @@ export default function App() {
               onClick={() => {
                 playUiSound('click', settings)
                 void refreshLists()
-                  .then(() => flash('success', 'Refreshed.'))
+                  .then(() => flash('success', t.telemetry.refreshed))
                   .catch((error) => flash('error', errorMessage(error)))
               }}
-              aria-label="Refresh app data"
+              aria-label={t.telemetry.refreshed}
             >
-              <span className="dock-tooltip">Refresh</span>
+              <span className="dock-tooltip">{settings.language === 'hi' ? 'ताज़ा करें' : settings.language === 'hi-Latn' ? 'Refresh karein' : 'Refresh'}</span>
               <div className="dock-icon-wrap">
                 <RefreshCw size={20} strokeWidth={1.8} />
               </div>
@@ -1649,9 +2182,9 @@ export default function App() {
                 playUiSound('click', settings)
                 setShowSettings(true)
               }}
-              aria-label="Settings"
+              aria-label={t.nav.settings}
             >
-              <span className="dock-tooltip">Settings</span>
+              <span className="dock-tooltip">{t.nav.settings}</span>
               <div className="dock-icon-wrap">
                 <Settings size={21} strokeWidth={1.8} />
               </div>
@@ -1662,9 +2195,9 @@ export default function App() {
                 playUiSound('click', settings)
                 setShowNewRepair(true)
               }}
-              aria-label="New repair"
+              aria-label={t.nav.newRepair}
             >
-              <span className="dock-tooltip">New repair</span>
+              <span className="dock-tooltip">{t.nav.newRepair}</span>
               <div className="dock-icon-wrap">
                 <Plus size={22} strokeWidth={2.5} />
               </div>
@@ -1684,6 +2217,7 @@ export default function App() {
           setIsBooting(true)
         }}
         onClose={() => setShowSettings(false)}
+        t={t}
       />
 
       {isHome && isBooting && (
@@ -1692,24 +2226,25 @@ export default function App() {
           settings={settings}
           onComplete={() => {
             setIsBooting(false)
-            sessionStorage.setItem('fixora_booted_session', 'true')
+            sessionStorage.setItem('revix_booted_session', 'true')
           }}
         />
       )}
 
       {showNewRepair && (
-        <NewRepairModal onClose={() => setShowNewRepair(false)} onCreate={createRepair} busy={busy} />
+        <NewRepairModal onClose={() => setShowNewRepair(false)} onCreate={createRepair} busy={busy} t={t} settings={settings} />
       )}
 
-      <CreditsModal isOpen={showCredits} onClose={() => setShowCredits(false)} />
+      <CreditsModal isOpen={showCredits} onClose={() => setShowCredits(false)} t={t} />
 
       <StandbyModal isOpen={showStandby} onResume={() => setShowStandby(false)} settings={settings} />
 
       <ConfirmModal
         isOpen={deleteModal.isOpen}
-        title="Delete device?"
-        message={`Are you sure you want to delete ${deleteModal.name} (${deleteModal.caseId})? This action cannot be undone.`}
-        confirmText="Delete"
+        title={t.deleteModal.title}
+        message={`${t.deleteModal.desc} (${deleteModal.name} - ${deleteModal.caseId})`}
+        confirmText={t.deleteModal.confirm}
+        cancelText={t.deleteModal.cancel}
         confirmTone="danger"
         busy={busy}
         onConfirm={confirmDeleteDevice}
@@ -1718,9 +2253,10 @@ export default function App() {
 
       <ConfirmModal
         isOpen={completeModal.isOpen}
-        title="Mark device as completed?"
-        message={`Marking ${completeModal.caseId} as completed will archive the device into Repair Memory and remove it from the active repair queue.`}
-        confirmText="Mark completed"
+        title={t.deleteModal.confirmCompleteTitle}
+        message={`${completeModal.caseId}: ${t.deleteModal.confirmCompleteMsg}`}
+        confirmText={t.deleteModal.confirmCompleteBtn}
+        cancelText={t.deleteModal.cancel}
         confirmTone="primary"
         busy={recordingOutcome}
         onConfirm={async () => {
@@ -1741,6 +2277,7 @@ function OverviewPage({
   onNavigate,
   settings,
   aiActive,
+  t,
 }: {
   dashboard: DashboardSummary | null
   cases: RepairCase[]
@@ -1748,6 +2285,7 @@ function OverviewPage({
   onNavigate: (tab: NavId) => void
   settings: AppSettings
   aiActive?: boolean
+  t: I18nCatalog
 }) {
   const urgent = cases.filter(
     (item) => (item.priority === 'urgent' || item.priority === 'high') && item.status !== 'completed'
@@ -1770,7 +2308,7 @@ function OverviewPage({
       )}
 
       {/* Hardware Cooling Fan Rotation & Convection Rings over Laptop Fan Hub */}
-      <OverviewFanOverlay animated={settings.animationsEnabled} />
+      <OverviewFanOverlay animated={settings.animationsEnabled} lang={settings.language} />
 
       {/* SMD Diagnostic Micro-LEDs on physical test points */}
       <div className="overview-probes-layer" aria-hidden="true">
@@ -1792,8 +2330,8 @@ function OverviewPage({
             )}
             <div className="probe-tooltip">
               <span className="probe-code">{tp.code}</span>
-              <span className="probe-desc">{tp.label}</span>
-              <span className="probe-val" style={{ color: tp.color }}>{tp.status}</span>
+              <span className="probe-desc">{tContent(tp.label, settings.language)}</span>
+              <span className="probe-val" style={{ color: tp.color }}>{tContent(tp.status, settings.language)}</span>
             </div>
           </div>
         ))}
@@ -1804,9 +2342,9 @@ function OverviewPage({
         <div className="overview-hud-header">
           <div className="overview-telemetry-chip">
             <span className={`overview-telemetry-dot ${aiActive ? 'online' : ''}`} />
-            <span>DIAGNOSTIC TELEMETRY // OVERVIEW</span>
+            <span>{t.overview.telemetry}</span>
           </div>
-          <h1>Overview</h1>
+          <h1>{t.overview.title}</h1>
         </div>
 
         {/* 2x2 Minimalist Glass Stat Cards */}
@@ -1825,8 +2363,8 @@ function OverviewPage({
               <span className="glass-card-arrow"><ArrowRight size={13} /></span>
             </div>
             <div className="glass-card-val">{dashboard?.active_repairs ?? 0}</div>
-            <div className="glass-card-title">Active repairs</div>
-            <div className="glass-card-detail">Across current queue</div>
+            <div className="glass-card-title">{t.overview.activeRepairs}</div>
+            <div className="glass-card-detail">{t.overview.activeRepairsDesc}</div>
           </button>
 
           <button
@@ -1843,8 +2381,8 @@ function OverviewPage({
               <span className="glass-card-arrow"><ArrowRight size={13} /></span>
             </div>
             <div className="glass-card-val">{dashboard?.ready_for_testing ?? 0}</div>
-            <div className="glass-card-title">Ready for testing</div>
-            <div className="glass-card-detail">Final verification stage</div>
+            <div className="glass-card-title">{t.overview.readyForTesting}</div>
+            <div className="glass-card-detail">{t.overview.readyForTestingDesc}</div>
           </button>
 
           <button
@@ -1861,8 +2399,8 @@ function OverviewPage({
               <span className="glass-card-arrow"><ArrowRight size={13} /></span>
             </div>
             <div className="glass-card-val">{dashboard?.completed_this_week ?? 0}</div>
-            <div className="glass-card-title">Completed this week</div>
-            <div className="glass-card-detail">Updated in the last 7 days</div>
+            <div className="glass-card-title">{t.overview.savedPrecedents}</div>
+            <div className="glass-card-detail">{t.overview.savedPrecedentsDesc}</div>
           </button>
 
           <button
@@ -1879,8 +2417,8 @@ function OverviewPage({
               <span className="glass-card-arrow"><ArrowRight size={13} /></span>
             </div>
             <div className="glass-card-val">{dashboard?.saved_cases ?? 0}</div>
-            <div className="glass-card-title">Repair memory</div>
-            <div className="glass-card-detail">Cases with outcomes & history</div>
+            <div className="glass-card-title">{t.nav.memory}</div>
+            <div className="glass-card-detail">{t.overview.savedPrecedentsDesc}</div>
           </button>
         </div>
 
@@ -1891,10 +2429,10 @@ function OverviewPage({
               <span className="attention-indicator">
                 <AlertTriangle size={15} />
               </span>
-              <h3>Attention needed</h3>
+              <h3>{t.overview.needsAttention}</h3>
             </div>
             <span className={`attention-count-badge ${urgent.length > 0 ? 'badge-urgent' : 'badge-calm'}`}>
-              {urgent.length} {urgent.length === 1 ? 'ISSUE' : 'ISSUES'}
+              {urgent.length} {urgent.length === 1 ? t.overview.issuesSingular : t.overview.issuesPlural}
             </span>
           </div>
 
@@ -1911,12 +2449,12 @@ function OverviewPage({
                 >
                   <span className="signal-bar-accent" />
                   <div className="signal-item-copy">
-                    <strong className="signal-item-title">{item.issue_title}</strong>
+                    <strong className="signal-item-title">{tContent(item.issue_title, settings.language)}</strong>
                     <span className="signal-item-meta">
-                      {item.id} · {item.brand} {item.model} · {statusNames[item.status]}
+                      {item.id} · {item.brand} {item.model} · {translations[settings.language]?.statuses[item.status] || statusNames[item.status]}
                     </span>
                   </div>
-                  <PriorityPill priority={item.priority} />
+                  <PriorityPill priority={item.priority} lang={settings.language} />
                   <ArrowRight size={14} className="signal-item-arrow" />
                 </button>
               ))}
@@ -1927,8 +2465,8 @@ function OverviewPage({
                 <CheckCircle2 size={16} />
               </div>
               <div className="calm-text-wrap">
-                <strong>No urgent repairs in queue</strong>
-                <small>All active devices operating on schedule.</small>
+                <strong>{t.overview.noUrgentTitle}</strong>
+                <small>{t.overview.noUrgentDesc}</small>
               </div>
             </div>
           )}
@@ -2039,7 +2577,7 @@ function OverviewCircuitMapOverlay({ animated }: { animated: boolean }) {
   )
 }
 
-function OverviewFanOverlay({ animated }: { animated: boolean }) {
+function OverviewFanOverlay({ animated, lang = 'en' }: { animated: boolean; lang?: DiagnosticLanguage }) {
   return (
     <div className="overview-fan-anchor" aria-hidden="true">
       {animated && (
@@ -2062,7 +2600,7 @@ function OverviewFanOverlay({ animated }: { animated: boolean }) {
       <div className="overview-fan-telemetry">
         <span className="fan-telemetry-pill">
           <span className="fan-telemetry-dot" />
-          FAN: 3,420 RPM · 38°C
+          {translations[lang]?.telemetry.fan || 'FAN: 3,420 RPM · 38°C'}
         </span>
       </div>
     </div>
@@ -2185,7 +2723,7 @@ function QueueCircuitMapOverlay({ animated }: { animated: boolean }) {
   )
 }
 
-function QueueCameraFocusOverlay({ animated }: { animated: boolean }) {
+function QueueCameraFocusOverlay({ animated, lang = 'en' }: { animated: boolean; lang?: DiagnosticLanguage }) {
   return (
     <div className="queue-camera-anchor" aria-hidden="true">
       {animated && (
@@ -2201,7 +2739,7 @@ function QueueCameraFocusOverlay({ animated }: { animated: boolean }) {
       </div>
       <div className="camera-telemetry-tag">
         <span className="camera-telemetry-dot" />
-        <span>OPTICAL RETICLE // 12MP DUAL OIS</span>
+        <span>{translations[lang]?.telemetry.cameraReticle || 'OPTICAL RETICLE // 12MP DUAL OIS'}</span>
       </div>
     </div>
   )
@@ -2220,6 +2758,7 @@ function CasesPage({
   onStatus,
   onDelete,
   settings,
+  t,
 }: {
   cases: RepairCase[]
   query: string
@@ -2233,6 +2772,7 @@ function CasesPage({
   onStatus: (id: string, status: CaseStatus) => void
   onDelete: (id: string, brand: string, model: string) => void
   settings: AppSettings
+  t: I18nCatalog
 }) {
   const animated = settings?.animationsEnabled ?? true
 
@@ -2253,7 +2793,7 @@ function CasesPage({
       )}
 
       {/* Smartphone Dual Camera Optical Focus Reticle */}
-      <QueueCameraFocusOverlay animated={animated} />
+      <QueueCameraFocusOverlay animated={animated} lang={settings.language} />
 
       {/* SMD Diagnostic Micro-LEDs on physical board test points */}
       <div className="queue-probes-layer" aria-hidden="true">
@@ -2275,8 +2815,8 @@ function CasesPage({
             )}
             <div className="probe-tooltip">
               <span className="probe-code">{tp.code}</span>
-              <span className="probe-desc">{tp.label}</span>
-              <span className="probe-val" style={{ color: tp.color }}>{tp.status}</span>
+              <span className="probe-desc">{tContent(tp.label, settings.language)}</span>
+              <span className="probe-val" style={{ color: tp.color }}>{tContent(tp.status, settings.language)}</span>
             </div>
           </div>
         ))}
@@ -2287,17 +2827,17 @@ function CasesPage({
         <div className="queue-hud-header">
           <div className="queue-telemetry-chip">
             <span className="queue-telemetry-dot" />
-            <span>DIAGNOSTIC QUEUE // ACTIVE WORKSTATION</span>
+            <span>{t.cases.telemetry}</span>
           </div>
           <div className="queue-header-row">
             <div className="queue-title-wrap">
-              <h1 className="queue-title">Repair queue</h1>
+              <h1 className="queue-title">{t.cases.title}</h1>
               <span className="queue-count-badge">
-                {cases.length} {cases.length === 1 ? 'DEVICE' : 'DEVICES'}
+                {cases.length} {cases.length === 1 ? t.cases.devicesSingular : t.cases.devicesPlural}
               </span>
             </div>
             <button className="button button-primary queue-new-btn" onClick={onNew}>
-              <Plus size={15} /> New repair
+              <Plus size={15} /> {t.nav.newRepair}
             </button>
           </div>
         </div>
@@ -2311,7 +2851,7 @@ function CasesPage({
                 aria-label="Search repair queue"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search ID, brand, model, issue..."
+                placeholder={t.cases.searchPlaceholder}
               />
               {query && (
                 <button onClick={() => setQuery('')} aria-label="Clear search">
@@ -2327,13 +2867,13 @@ function CasesPage({
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                 >
-                  <option value="all">All active</option>
-                  <option value="new">New</option>
-                  <option value="diagnosing">Diagnosing</option>
-                  <option value="waiting_parts">Waiting for parts</option>
-                  <option value="in_repair">In repair</option>
-                  <option value="testing">Testing</option>
-                  <option value="on_hold">On hold</option>
+                  <option value="all">{t.cases.allStatuses}</option>
+                  <option value="new">{t.statuses.new}</option>
+                  <option value="diagnosing">{t.statuses.diagnosing}</option>
+                  <option value="waiting_parts">{t.statuses.waiting_parts}</option>
+                  <option value="in_repair">{t.statuses.in_repair}</option>
+                  <option value="testing">{t.statuses.testing}</option>
+                  <option value="on_hold">{t.statuses.on_hold}</option>
                 </select>
                 <ChevronDown size={14} />
               </label>
@@ -2343,11 +2883,11 @@ function CasesPage({
                   value={priorityFilter}
                   onChange={(e) => setPriorityFilter(e.target.value)}
                 >
-                  <option value="all">All priorities</option>
-                  <option value="urgent">Urgent</option>
-                  <option value="high">High</option>
-                  <option value="normal">Normal</option>
-                  <option value="low">Low</option>
+                  <option value="all">{t.cases.allPriorities}</option>
+                  <option value="urgent">{t.priorities.urgent}</option>
+                  <option value="high">{t.priorities.high}</option>
+                  <option value="normal">{t.priorities.normal}</option>
+                  <option value="low">{t.priorities.low}</option>
                 </select>
                 <ChevronDown size={14} />
               </label>
@@ -2359,12 +2899,12 @@ function CasesPage({
               <table className="data-table queue-table">
                 <thead>
                   <tr>
-                    <th>DEVICE</th>
-                    <th>ISSUE</th>
-                    <th>STATUS</th>
-                    <th>PRIORITY</th>
-                    <th>CUSTOMER CONTACT</th>
-                    <th style={{ textAlign: 'right' }}>ACTIONS</th>
+                    <th>{t.cases.colDevice}</th>
+                    <th>{t.cases.colIssue}</th>
+                    <th>{t.cases.colStatus}</th>
+                    <th>{t.cases.colPriority}</th>
+                    <th>{t.cases.customerContactCol}</th>
+                    <th style={{ textAlign: 'right' }}>{t.cases.colActions}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2375,19 +2915,19 @@ function CasesPage({
                           <div className="device-avatar">{deviceInitials(item.device_category)}</div>
                           <div>
                             <strong>{item.id}</strong>
-                            <span>{item.brand} {item.model}</span>
+                            <span>{item.brand} {item.model} · {tContent(item.device_category, settings.language)}</span>
                           </div>
                         </div>
                       </td>
                       <td>
                         <div className="issue-cell">
-                          <strong>{item.issue_title}</strong>
-                          <span className="issue-snippet">{item.symptoms}</span>
+                          <strong>{tContent(item.issue_title, settings.language)}</strong>
+                          <span className="issue-snippet">{tContent(item.symptoms, settings.language)}</span>
                         </div>
                       </td>
                       <td>
                         <div className="status-cell">
-                          <StatusPill status={item.status} />
+                          <StatusPill status={item.status} lang={settings.language} />
                           <select
                             className="status-edit-select"
                             aria-label={`Change status for ${item.id}`}
@@ -2395,18 +2935,18 @@ function CasesPage({
                             onClick={(e) => e.stopPropagation()}
                             onChange={(e) => onStatus(item.id, e.target.value as CaseStatus)}
                           >
-                            <option value="new">New</option>
-                            <option value="diagnosing">Diagnosing</option>
-                            <option value="waiting_parts">Waiting for parts</option>
-                            <option value="in_repair">In repair</option>
-                            <option value="testing">Testing</option>
-                            <option value="completed">Completed</option>
-                            <option value="on_hold">On hold</option>
+                            <option value="new">{t.statuses.new}</option>
+                            <option value="diagnosing">{t.statuses.diagnosing}</option>
+                            <option value="waiting_parts">{t.statuses.waiting_parts}</option>
+                            <option value="in_repair">{t.statuses.in_repair}</option>
+                            <option value="testing">{t.statuses.testing}</option>
+                            <option value="completed">{t.statuses.completed}</option>
+                            <option value="on_hold">{t.statuses.on_hold}</option>
                           </select>
                         </div>
                       </td>
                       <td>
-                        <PriorityPill priority={item.priority} />
+                        <PriorityPill priority={item.priority} lang={settings.language} />
                       </td>
                       <td>
                         <div className="contact-cell">
@@ -2443,8 +2983,8 @@ function CasesPage({
           ) : (
             <EmptyState
               icon={PackageSearch}
-              title="No devices in active queue"
-              description="All active devices have been serviced or match none of the filters."
+              title={t.cases.emptyTitle}
+              description={t.cases.emptyDesc}
             />
           )}
         </div>
@@ -2555,7 +3095,7 @@ function DiagnosticsCircuitMapOverlay({ animated }: { animated: boolean }) {
   )
 }
 
-function DiagnosticsHoloOverlay({ animated }: { animated: boolean }) {
+function DiagnosticsHoloOverlay({ animated, lang = 'en' }: { animated: boolean; lang?: DiagnosticLanguage }) {
   return (
     <div className="diagnostics-holo-anchor" aria-hidden="true">
       {animated && (
@@ -2569,19 +3109,19 @@ function DiagnosticsHoloOverlay({ animated }: { animated: boolean }) {
       )}
       <div className="holo-telemetry-tag">
         <span className="holo-tag-dot" />
-        <span>HOLO-HUD // EXPLODED ASSEMBLY VIEW</span>
+        <span>{translations[lang]?.telemetry.holoReticle || 'HOLO-HUD // EXPLODED ASSEMBLY VIEW'}</span>
       </div>
     </div>
   )
 }
 
-function DiagnosticsWaveformOverlay({ animated }: { animated: boolean }) {
+function DiagnosticsWaveformOverlay({ animated, lang = 'en' }: { animated: boolean; lang?: DiagnosticLanguage }) {
   return (
     <div className="diagnostics-waveform-anchor" aria-hidden="true">
       {animated && <div className="waveform-signal-pulse" />}
       <div className="waveform-telemetry-pill">
         <span className="waveform-dot" />
-        <span>142.5 MHz // RF NOMINAL</span>
+        <span>{translations[lang]?.telemetry.waveform || '142.5 MHz // RF NOMINAL'}</span>
       </div>
     </div>
   )
@@ -2608,12 +3148,17 @@ function DiagnosticsPage({
   onSaveOutcome,
   onDelete,
   onOpenCase,
+  onReloadDetail,
+  onNavigateComponents,
   settings,
+  onUpdateSettings,
+  flash,
+  t,
 }: {
   selected: CaseDetail | null
   cases: RepairCase[]
-  diagnosticsTab: 'evidence' | 'recommendation'
-  setDiagnosticsTab: (tab: 'evidence' | 'recommendation') => void
+  diagnosticsTab: 'evidence' | 'components' | 'recommendation'
+  setDiagnosticsTab: (tab: 'evidence' | 'components' | 'recommendation') => void
   recommendation: Recommendation | null
   health: Health | null
   stale: boolean
@@ -2630,8 +3175,16 @@ function DiagnosticsPage({
   onSaveOutcome: (event: FormEvent<HTMLFormElement>) => void
   onDelete: (id: string, brand: string, model: string) => void
   onOpenCase: (id: string, tab?: NavId) => void
+  onReloadDetail?: () => Promise<void>
+  onNavigateComponents?: () => void
   settings?: AppSettings
+  onUpdateSettings?: Dispatch<SetStateAction<AppSettings>>
+  flash?: (type: 'success' | 'error' | 'info', message: string) => void
+  t: I18nCatalog
 }) {
+  const [showDeviceModal, setShowDeviceModal] = useState(false)
+  const [isTrackModalOpen, setIsTrackModalOpen] = useState(false)
+  const [updatingComponent, setUpdatingComponent] = useState<Component | null>(null)
   const animated = settings?.animationsEnabled ?? true
 
   return (
@@ -2646,10 +3199,10 @@ function DiagnosticsPage({
       <DiagnosticsCircuitMapOverlay animated={animated} />
 
       {/* Holographic exploded view reticle and scanbeam */}
-      <DiagnosticsHoloOverlay animated={animated} />
+      <DiagnosticsHoloOverlay animated={animated} lang={settings?.language} />
 
       {/* Frequency / Oscilloscope Waveform Monitor */}
-      <DiagnosticsWaveformOverlay animated={animated} />
+      <DiagnosticsWaveformOverlay animated={animated} lang={settings?.language} />
 
       {/* Optical Laser Scanner Line */}
       {animated && <div className="diagnostics-laser-scanner" aria-hidden="true" />}
@@ -2674,8 +3227,8 @@ function DiagnosticsPage({
             )}
             <div className="probe-tooltip">
               <span className="probe-code">{tp.code}</span>
-              <span className="probe-desc">{tp.label}</span>
-              <span className="probe-val" style={{ color: tp.color }}>{tp.status}</span>
+              <span className="probe-desc">{tContent(tp.label, settings?.language)}</span>
+              <span className="probe-val" style={{ color: tp.color }}>{tContent(tp.status, settings?.language)}</span>
             </div>
           </div>
         ))}
@@ -2686,10 +3239,10 @@ function DiagnosticsPage({
         <div className="diagnostics-hud-header">
           <div className="diagnostics-telemetry-chip">
             <span className="diagnostics-telemetry-dot" />
-            <span>OPTICAL DIAGNOSTIC LAB // MULTI-SPECTRAL TELEMETRY</span>
+            <span>{t.diagnostics.telemetry}</span>
           </div>
           <div className="diagnostics-header-row">
-            <h1 className="diagnostics-title">Diagnostics</h1>
+            <h1 className="diagnostics-title">{t.diagnostics.title}</h1>
             {selected && (
               <span className="diagnostics-device-chip">
                 {selected.id} · {selected.brand} {selected.model}
@@ -2700,28 +3253,57 @@ function DiagnosticsPage({
 
       <div className="diagnostic-select-bar">
         <div className="select-case-mark"><Stethoscope size={16} /></div>
-        <label className="case-picker">
-          <span className="sr-only">Select device</span>
-          <select value={selected?.id || ''} onChange={(e) => onSelect(e.target.value)}>
-            <option value="" disabled>Select device</option>
-            {cases.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.id} · {item.brand} {item.model} — {item.issue_title}
-              </option>
-            ))}
-          </select>
-          <ChevronDown size={14} />
-        </label>
-        {selected && <StatusPill status={selected.status} />}
+        <button
+          type="button"
+          className="diagnostic-select-card-trigger"
+          onClick={() => {
+            if (settings) playUiSound('click', settings)
+            setShowDeviceModal(true)
+          }}
+          title={t.diagnostics.selectDevice}
+        >
+          <div className="trigger-device-info">
+            {selected ? (
+              <span className="trigger-device-summary">
+                <span className="trigger-case-badge">{selected.id}</span>
+                <span className="trigger-device-name">{selected.brand} {selected.model}</span>
+                <span className="trigger-device-sep">—</span>
+                <span className="trigger-device-issue">{tContent(selected.issue_title, settings?.language)}</span>
+              </span>
+            ) : (
+              <span className="trigger-device-empty">{t.diagnostics.selectDevice}</span>
+            )}
+          </div>
+          <span className="trigger-action-pill">
+            <SlidersHorizontal size={13} />
+            <span>{selected ? t.diagnostics.changeDevice : t.diagnostics.selectDevice}</span>
+            <ChevronRight size={13} />
+          </span>
+        </button>
+        {selected && <StatusPill status={selected.status} lang={settings?.language} />}
         {selected && (
           <button
             className="button button-ghost-danger button-sm"
             onClick={() => onDelete(selected.id, selected.brand, selected.model)}
+            title={t.diagnostics.delete}
           >
-            <Trash2 size={14} /> Delete
+            <Trash2 size={14} /> <span className="hide-on-mobile">{t.diagnostics.delete}</span>
           </button>
         )}
       </div>
+
+      <DeviceSelectionModal
+        isOpen={showDeviceModal}
+        cases={cases}
+        selectedId={selected?.id || null}
+        onSelect={(id) => {
+          onSelect(id)
+          setShowDeviceModal(false)
+        }}
+        onClose={() => setShowDeviceModal(false)}
+        t={t}
+        settings={settings}
+      />
 
       <div className="diagnostics-subnav">
         <button
@@ -2729,14 +3311,24 @@ function DiagnosticsPage({
           onClick={() => setDiagnosticsTab('evidence')}
         >
           <Activity size={15} />
-          Evidence & Repair Outcome
+          {t.diagnostics.tabEvidence}
+        </button>
+        <button
+          className={`diagnostics-tab-btn ${diagnosticsTab === 'components' ? 'active' : ''}`}
+          onClick={() => setDiagnosticsTab('components')}
+        >
+          <Cpu size={15} />
+          {t.diagnostics.tabComponents}
+          {selected?.components && selected.components.length > 0 && (
+            <span className="tab-count-badge">{selected.components.length}</span>
+          )}
         </button>
         <button
           className={`diagnostics-tab-btn ${diagnosticsTab === 'recommendation' ? 'active' : ''}`}
           onClick={() => setDiagnosticsTab('recommendation')}
         >
           <Sparkles size={15} />
-          AI Recommendation
+          {t.diagnostics.tabRecommendation}
           {recommendation && <span className="tab-indicator-dot" />}
         </button>
       </div>
@@ -2745,8 +3337,8 @@ function DiagnosticsPage({
         <div className="surface-card">
           <EmptyState
             icon={Stethoscope}
-            title="Choose a device"
-            description="Select an existing device from the dropdown above to view or enter diagnostic data."
+            title={t.diagnostics.chooseDeviceTitle}
+            description={t.diagnostics.chooseDeviceDesc}
           />
         </div>
       ) : (
@@ -2759,34 +3351,96 @@ function DiagnosticsPage({
                   <div className="case-overview-id">
                     <div className="eyebrow-row">
                       <span className="eyebrow">{selected.id}</span>
-                      <PriorityPill priority={selected.priority} />
+                      <PriorityPill priority={selected.priority} lang={settings?.language} />
                     </div>
-                    <h2>{selected.issue_title}</h2>
-                    <p>{selected.brand} {selected.model} · {selected.device_category}</p>
+                    <h2>{tContent(selected.issue_title, settings?.language)}</h2>
+                    <p>{selected.brand} {selected.model} · {tContent(selected.device_category, settings?.language)}</p>
                   </div>
                   <div className="case-overview-status">
-                    <StatusPill status={selected.status} />
+                    <StatusPill status={selected.status} lang={settings?.language} />
                   </div>
                 </div>
                 <div className="case-symptoms">
-                  <span className="meta-label">SYMPTOMS</span>
-                  <p>{selected.symptoms}</p>
+                  <span className="meta-label">{t.diagnostics.symptoms}</span>
+                  <p>{tContent(selected.symptoms, settings?.language)}</p>
                 </div>
                 <div className="case-overview-foot">
-                  <span><Clock3 size={13} /> {dateLabel(selected.created_at)}</span>
+                  <span><Clock3 size={13} /> {dateLabel(selected.created_at, settings?.language)}</span>
                   {selected.customer_contact && (
                     <span><Phone size={13} /> {selected.customer_contact}</span>
                   )}
-                  <span><Activity size={13} /> {selected.tests.length} tests</span>
+                  <span><Activity size={13} /> {selected.tests.length} {t.diagnostics.tests}</span>
                 </div>
+
+                {selected.components && selected.components.length > 0 ? (
+                  <div
+                    className="case-components-quick-strip"
+                    onClick={() => {
+                      if (settings) playUiSound('click', settings)
+                      setDiagnosticsTab('components')
+                    }}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <div className="strip-left">
+                      <Cpu size={14} className="strip-icon" />
+                      <span className="strip-label">{t.diagnostics.tabComponents}:</span>
+                      <div className="strip-badges">
+                        {selected.components.filter(c => c.health_status === 'working').length > 0 && (
+                          <span className="badge-pill badge-health badge-health-working">
+                            {selected.components.filter(c => c.health_status === 'working').length} {t.components.healthStatuses.working}
+                          </span>
+                        )}
+                        {selected.components.filter(c => c.health_status === 'needs_testing').length > 0 && (
+                          <span className="badge-pill badge-health badge-health-needs_testing">
+                            {selected.components.filter(c => c.health_status === 'needs_testing').length} {t.components.healthStatuses.needs_testing}
+                          </span>
+                        )}
+                        {selected.components.filter(c => c.health_status === 'faulty').length > 0 && (
+                          <span className="badge-pill badge-health badge-health-faulty">
+                            {selected.components.filter(c => c.health_status === 'faulty').length} {t.components.healthStatuses.faulty}
+                          </span>
+                        )}
+                        {selected.components.filter(c => c.health_status === 'unknown').length > 0 && (
+                          <span className="badge-pill badge-health badge-health-unknown">
+                            {selected.components.filter(c => c.health_status === 'unknown').length} {t.components.healthStatuses.unknown}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span className="strip-action">
+                      <span>View Health</span>
+                      <ChevronRight size={13} />
+                    </span>
+                  </div>
+                ) : (
+                  <div
+                    className="case-components-quick-strip empty"
+                    onClick={() => {
+                      if (settings) playUiSound('click', settings)
+                      setDiagnosticsTab('components')
+                    }}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <div className="strip-left">
+                      <Cpu size={14} className="strip-icon" />
+                      <span className="strip-label">Track electronic components for multimeter verification</span>
+                    </div>
+                    <span className="strip-action">
+                      <span>+ Track</span>
+                      <ChevronRight size={13} />
+                    </span>
+                  </div>
+                )}
               </section>
 
               <section className="surface-card evidence-card">
                 <div className="section-card-head">
                   <div>
-                    <h3>Diagnostic evidence</h3>
+                    <h3>{t.diagnostics.diagnosticEvidence}</h3>
                   </div>
-                  <span className="section-count">{selected.tests.length} RESULTS</span>
+                  <span className="section-count">{selected.tests.length} {t.diagnostics.resultsCount}</span>
                 </div>
 
                 {selected.tests.length ? (
@@ -2798,14 +3452,14 @@ function DiagnosticsPage({
                         </div>
                         <div className="evidence-copy">
                           <div className="evidence-heading">
-                            <strong>{test.test_name}</strong>
+                            <strong>{tContent(test.test_name, settings?.language)}</strong>
                             <span className={`result-tag result-tag-${test.result}`}>
-                              {test.result.replaceAll('_', ' ')}
+                              {translations[settings?.language || 'en']?.diagnostics.testResults[test.result] || test.result.replaceAll('_', ' ')}
                             </span>
                           </div>
-                          <p>{test.observed_result}</p>
-                          {test.details && <small>{test.details}</small>}
-                          <span className="evidence-time">{dateTimeLabel(test.performed_at)}</span>
+                          <p>{tContent(test.observed_result, settings?.language)}</p>
+                          {test.details && <small>{tContent(test.details, settings?.language)}</small>}
+                          <span className="evidence-time">{dateTimeLabel(test.performed_at, settings?.language)}</span>
                         </div>
                       </div>
                     ))}
@@ -2813,38 +3467,51 @@ function DiagnosticsPage({
                 ) : (
                   <div className="inline-empty">
                     <CircleHelp size={16} />
-                    <span>No test results yet. Record the first test below.</span>
+                    <span>{t.diagnostics.noTests}</span>
                   </div>
                 )}
 
                 {selected.status === 'completed' ? (
                   <div className="read-only-note">
-                    This case is completed. Reopen to record more tests.
+                    {t.diagnostics.completedReadOnly}
                   </div>
                 ) : (
                   <form className="add-test-form" onSubmit={onAddTest}>
-                    <div className="form-section-label">ADD A TEST RESULT</div>
+                    <div className="form-section-label">{t.diagnostics.addTestLabel}</div>
                     <div className="form-grid two-cols">
-                      <label className="span-two">Test performed
-                        <select value={testForm.test_name} onChange={(e) => setTestForm((v) => ({ ...v, test_name: e.target.value }))}>
-                          {testSuggestions.map((item) => <option key={item}>{item}</option>)}
-                        </select>
+                      <label className="span-two">{t.diagnostics.testPerformed}
+                        <input
+                          type="text"
+                          list="diagnostic-test-suggestions"
+                          className="test-name-input"
+                          value={testForm.test_name}
+                          onChange={(e) => setTestForm((v) => ({ ...v, test_name: e.target.value }))}
+                          placeholder={t.diagnostics.testPerformedPlaceholder}
+                          required
+                        />
+                        <datalist id="diagnostic-test-suggestions">
+                          {testSuggestions.map((item) => (
+                            <option key={item} value={item}>
+                              {tContent(item, settings?.language)}
+                            </option>
+                          ))}
+                        </datalist>
                       </label>
-                      <label>Result
+                      <label>{t.diagnostics.resultLabel}
                         <select value={testForm.result} onChange={(e) => setTestForm((v) => ({ ...v, result: e.target.value as TestStatus }))}>
-                          {testOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                          {t.testOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                         </select>
                       </label>
-                      <label>Observation
-                        <textarea required rows={2} value={testForm.observed_result} onChange={(e) => setTestForm((v) => ({ ...v, observed_result: e.target.value }))} placeholder="What was observed?" />
+                      <label>{t.diagnostics.observation}
+                        <textarea required rows={2} value={testForm.observed_result} onChange={(e) => setTestForm((v) => ({ ...v, observed_result: e.target.value }))} placeholder={t.diagnostics.observationPlaceholder} />
                       </label>
-                      <label className="span-two">Notes <span className="label-muted">(optional)</span>
-                        <input value={testForm.details} onChange={(e) => setTestForm((v) => ({ ...v, details: e.target.value }))} placeholder="Additional conditions or context" />
+                      <label className="span-two">{t.diagnostics.notes} <span className="label-muted">{t.diagnostics.optional}</span>
+                        <input value={testForm.details} onChange={(e) => setTestForm((v) => ({ ...v, details: e.target.value }))} placeholder={t.diagnostics.notesPlaceholder} />
                       </label>
                     </div>
                     <div className="form-footer">
                       <button className="button button-dark" type="submit" disabled={recordingTest}>
-                        {recordingTest ? <LoaderCircle size={15} className="spin" /> : <Plus size={15} />} Save test
+                        {recordingTest ? <LoaderCircle size={15} className="spin" /> : <Plus size={15} />} {recordingTest ? t.diagnostics.saving : t.diagnostics.saveTest}
                       </button>
                     </div>
                   </form>
@@ -2854,32 +3521,190 @@ function DiagnosticsPage({
               <section className="surface-card outcome-card">
                 <div className="section-card-head">
                   <div>
-                    <h3>Repair outcome</h3>
+                    <h3>{t.diagnostics.repairOutcome}</h3>
                   </div>
                 </div>
                 <form onSubmit={onSaveOutcome} className="outcome-form">
-                  <label>Confirmed fault
-                    <input required minLength={3} value={outcomeForm.confirmed_fault} onChange={(e) => setOutcomeForm((v) => ({ ...v, confirmed_fault: e.target.value }))} placeholder="Diagnosed fault" />
+                  <label>{t.diagnostics.confirmedFault}
+                    <input required minLength={3} value={outcomeForm.confirmed_fault} onChange={(e) => setOutcomeForm((v) => ({ ...v, confirmed_fault: e.target.value }))} placeholder={t.diagnostics.confirmedFaultPlaceholder} />
                   </label>
-                  <label>Repair action taken
-                    <textarea required minLength={3} rows={2} value={outcomeForm.repair_action} onChange={(e) => setOutcomeForm((v) => ({ ...v, repair_action: e.target.value }))} placeholder="What was repaired or replaced?" />
+                  <label>{t.diagnostics.repairAction}
+                    <textarea required minLength={3} rows={2} value={outcomeForm.repair_action} onChange={(e) => setOutcomeForm((v) => ({ ...v, repair_action: e.target.value }))} placeholder={t.diagnostics.repairActionPlaceholder} />
                   </label>
-                  <label>Verification outcome
-                    <textarea required minLength={3} rows={2} value={outcomeForm.outcome} onChange={(e) => setOutcomeForm((v) => ({ ...v, outcome: e.target.value }))} placeholder="Final verification result" />
+                  <label>{t.diagnostics.verificationOutcome}
+                    <textarea required minLength={3} rows={2} value={outcomeForm.outcome} onChange={(e) => setOutcomeForm((v) => ({ ...v, outcome: e.target.value }))} placeholder={t.diagnostics.verificationOutcomePlaceholder} />
                   </label>
                   <div className="outcome-actions">
-                    <label className="outcome-status-label">Set status
+                    <label className="outcome-status-label">{t.diagnostics.setStatus}
                       <select value={outcomeForm.status} onChange={(e) => setOutcomeForm((v) => ({ ...v, status: e.target.value as 'testing' | 'completed' | 'in_repair' }))}>
-                        <option value="testing">Testing</option>
-                        <option value="in_repair">In repair</option>
-                        <option value="completed">Completed</option>
+                        <option value="testing">{t.statuses.testing || 'Testing'}</option>
+                        <option value="in_repair">{t.statuses.in_repair || 'In repair'}</option>
+                        <option value="completed">{t.statuses.completed || 'Completed'}</option>
                       </select>
                     </label>
                     <button className="button button-primary" type="submit" disabled={recordingOutcome}>
-                      {recordingOutcome ? <LoaderCircle size={15} className="spin" /> : <CheckCircle2 size={15} />} Save outcome
+                      {recordingOutcome ? <LoaderCircle size={15} className="spin" /> : <CheckCircle2 size={15} />} {t.diagnostics.saveOutcome}
                     </button>
                   </div>
                 </form>
+              </section>
+            </div>
+          )}
+
+          {diagnosticsTab === 'components' && (
+            <div className="diagnostics-subpage-components">
+              <section className="surface-card component-health-card">
+                <div className="component-health-header">
+                  <div className="comp-header-info">
+                    <div className="comp-header-icon"><Cpu size={18} /></div>
+                    <div>
+                      <h3>{t.diagnostics.componentHealthTitle}</h3>
+                      <p className="comp-header-sub">{t.diagnostics.componentHealthDesc}</p>
+                    </div>
+                  </div>
+                  <div className="comp-header-actions">
+                    <button
+                      className="button button-primary button-compact"
+                      onClick={() => {
+                        if (settings) playUiSound('click', settings)
+                        setIsTrackModalOpen(true)
+                      }}
+                      disabled={selected.status === 'completed'}
+                    >
+                      <Plus size={15} /> {t.diagnostics.trackComponent}
+                    </button>
+                  </div>
+                </div>
+
+                {/* KPI bar for case components */}
+                <div className="case-components-stat-grid">
+                  <div className="case-comp-stat-pill">
+                    <span className="stat-label">Total Tracked</span>
+                    <span className="stat-val">{(selected.components || []).length}</span>
+                  </div>
+                  <div className="case-comp-stat-pill working">
+                    <span className="stat-label">{t.components.healthStatuses.working}</span>
+                    <span className="stat-val">{(selected.components || []).filter((c) => c.health_status === 'working').length}</span>
+                  </div>
+                  <div className="case-comp-stat-pill needs-testing">
+                    <span className="stat-label">{t.components.healthStatuses.needs_testing}</span>
+                    <span className="stat-val">{(selected.components || []).filter((c) => c.health_status === 'needs_testing').length}</span>
+                  </div>
+                  <div className="case-comp-stat-pill faulty">
+                    <span className="stat-label">{t.components.healthStatuses.faulty}</span>
+                    <span className="stat-val">{(selected.components || []).filter((c) => c.health_status === 'faulty').length}</span>
+                  </div>
+                </div>
+
+                {/* Rule notice alert */}
+                <div className="evidence-rule-callout">
+                  <ShieldCheck size={16} />
+                  <span>{t.diagnostics.testEvidenceRequired}</span>
+                </div>
+
+                {/* Component list */}
+                {(!selected.components || selected.components.length === 0) ? (
+                  <div className="case-components-empty">
+                    <Cpu size={32} />
+                    <h4>No electronic components tracked yet</h4>
+                    <p>Track suspected or tested ICs, rails, displays, or connectors for {selected.brand} {selected.model} to record multimeter evidence.</p>
+                    {selected.status !== 'completed' && (
+                      <button
+                        className="button button-dark"
+                        onClick={() => {
+                          if (settings) playUiSound('click', settings)
+                          setIsTrackModalOpen(true)
+                        }}
+                      >
+                        <Plus size={15} /> {t.diagnostics.trackComponent}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="case-components-list">
+                    {selected.components.map((comp) => (
+                      <div key={comp.id} className="case-component-card">
+                        <div className="case-comp-top">
+                          <div className="case-comp-meta">
+                            <div className="case-comp-tags">
+                              <span className="case-comp-id">{comp.id}</span>
+                              {comp.part_number && <span className="case-comp-pn">· {comp.part_number}</span>}
+                              <span className="case-comp-cat">{tContent(comp.category, settings?.language)}</span>
+                              <span className={`case-comp-cond cond-${comp.condition.toLowerCase()}`}>
+                                {comp.condition}
+                              </span>
+                            </div>
+                            <h4 className="case-comp-name">{tContent(comp.name, settings?.language)}</h4>
+                          </div>
+                          <div className="case-comp-health-badge-wrap">
+                            <span className={`badge-pill badge-health badge-health-${comp.health_status}`}>
+                              {t.components.healthStatuses[comp.health_status] || comp.health_status}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="case-comp-evidence-section">
+                          <div className="evidence-header">
+                            <span className="meta-label">MULTIMETER / TEST OBSERVATIONS</span>
+                            {comp.tested_at && (
+                              <span className="evidence-timestamp">
+                                <Clock3 size={11} /> {dateTimeLabel(comp.tested_at, settings?.language)}
+                              </span>
+                            )}
+                          </div>
+                          {comp.test_evidence ? (
+                            <div className="evidence-box has-evidence">
+                              <Zap size={14} className="evidence-icon" />
+                              <p className="evidence-text">{tContent(comp.test_evidence, settings?.language)}</p>
+                            </div>
+                          ) : (
+                            <div className="evidence-box empty-evidence">
+                              <AlertCircle size={14} className="evidence-warn-icon" />
+                              <span className="evidence-empty-text">No multimeter evidence recorded yet. Health status is unverified.</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="case-comp-foot">
+                          <div className="case-comp-reuse-hints">
+                            <span className={`micro-status-chip reuse-${comp.reuse_status}`}>
+                              Reuse: {t.components.reuseStatuses[comp.reuse_status] || comp.reuse_status}
+                            </span>
+                            <span className={`micro-status-chip resale-${comp.resale_status}`}>
+                              Resale: {t.components.resaleStatuses[comp.resale_status] || comp.resale_status}
+                            </span>
+                          </div>
+
+                          <div className="case-comp-actions">
+                            {selected.status !== 'completed' && (
+                              <button
+                                className="button button-secondary button-sm"
+                                onClick={() => {
+                                  if (settings) playUiSound('click', settings)
+                                  setUpdatingComponent(comp)
+                                }}
+                              >
+                                <Wrench size={13} /> {t.diagnostics.updateHealth}
+                              </button>
+                            )}
+                            {onNavigateComponents && (
+                              <button
+                                className="button button-ghost button-sm"
+                                onClick={() => {
+                                  if (settings) playUiSound('click', settings)
+                                  onNavigateComponents()
+                                }}
+                                title="View in Warehouse Inventory"
+                              >
+                                <ExternalLink size={13} /> Warehouse
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </section>
             </div>
           )}
@@ -2889,11 +3714,58 @@ function DiagnosticsPage({
               <section className="surface-card ai-clean-copilot">
                 <div className="ai-panel-header">
                   <div className="ai-panel-icon"><Sparkles size={18} /></div>
-                  <div>
-                    <h3>Diagnostic copilot</h3>
-                    <p className="ai-model-tag">
-                      {health?.model_configured ? `${health.model_name} (Gemini API)` : 'Local rule-based guidance'}
-                    </p>
+                  <div className="ai-panel-titles">
+                    <h3>{t.diagnostics.copilotTitle}</h3>
+                    <div className="ai-model-row">
+                      <p className="ai-model-tag">
+                        {settings?.modelEngine === 'fallback-rules'
+                          ? 'Local rule-based guidance'
+                          : health?.model_configured
+                          ? `${settings?.modelEngine === 'flash-turbo' ? 'Gemini 3.1 Flash Lite' : settings?.modelEngine === 'gemini-flash' ? 'Gemini 3.5 Flash' : 'Gemma 4 26B'} (Gemini API)`
+                          : 'Local rule-based guidance'}
+                      </p>
+                      <span className={`copilot-speed-chip ${settings?.modelEngine ?? 'flash-turbo'}`}>
+                        {settings?.modelEngine === 'flash-turbo' && '⚡ Turbo (~1-2s)'}
+                        {settings?.modelEngine === 'gemini-flash' && '⚡ Flash (~3-5s)'}
+                        {settings?.modelEngine === 'gemma-4' && '🧠 Gemma (~40s)'}
+                        {settings?.modelEngine === 'fallback-rules' && '⚙️ Local rules'}
+                      </span>
+                      <div className="copilot-lang-pill-group" role="group" aria-label="Diagnostic Language">
+                        <button
+                          type="button"
+                          className={`lang-pill ${settings?.language === 'en' ? 'active' : ''}`}
+                          onClick={() => {
+                            if (settings) playUiSound('toggle', settings)
+                            onUpdateSettings?.((prev) => ({ ...prev, language: 'en' }))
+                          }}
+                          title="Switch to English"
+                        >
+                          EN
+                        </button>
+                        <button
+                          type="button"
+                          className={`lang-pill ${settings?.language === 'hi' ? 'active' : ''}`}
+                          onClick={() => {
+                            if (settings) playUiSound('toggle', settings)
+                            onUpdateSettings?.((prev) => ({ ...prev, language: 'hi' }))
+                          }}
+                          title="Switch to Proper Hindi (हिन्दी)"
+                        >
+                          हिन्दी
+                        </button>
+                        <button
+                          type="button"
+                          className={`lang-pill ${settings?.language === 'hi-Latn' ? 'active' : ''}`}
+                          onClick={() => {
+                            if (settings) playUiSound('toggle', settings)
+                            onUpdateSettings?.((prev) => ({ ...prev, language: 'hi-Latn' }))
+                          }}
+                          title="Switch to Hinglish (Latin Script)"
+                        >
+                          Hinglish
+                        </button>
+                      </div>
+                    </div>
                   </div>
                   <button
                     className="button button-ai button-compact"
@@ -2901,21 +3773,28 @@ function DiagnosticsPage({
                     disabled={generating || selected.status === 'completed'}
                   >
                     {generating ? (
-                      <><LoaderCircle size={15} className="spin" /> Reasoning…</>
+                      <><LoaderCircle size={15} className="spin" /> {t.diagnostics.generatingBtn}</>
                     ) : (
-                      <><Sparkles size={15} /> {recommendation ? 'Regenerate recommendation' : 'Generate recommendation'}</>
+                      <><Sparkles size={15} /> {recommendation ? t.diagnostics.regenerateBtn : t.diagnostics.generateBtn}</>
                     )}
                   </button>
                 </div>
               </section>
 
               {recommendation ? (
-                <RecommendationView recommendation={recommendation} stale={stale} />
+                <RecommendationView
+                  recommendation={recommendation}
+                  stale={stale}
+                  caseDetail={selected}
+                  settings={settings}
+                  flash={flash}
+                  t={t}
+                />
               ) : (
                 <section className="surface-card waiting-panel-clean">
                   <BrainCircuit size={28} className="muted-icon" />
-                  <h3>No recommendation generated yet</h3>
-                  <p>Click "Generate recommendation" above to produce guided checks from entered evidence.</p>
+                  <h3>{t.diagnostics.noRecTitle}</h3>
+                  <p>{t.diagnostics.noRecDesc}</p>
                 </section>
               )}
 
@@ -2923,7 +3802,7 @@ function DiagnosticsPage({
                 <section className="surface-card side-memory-card">
                   <div className="section-card-head">
                     <div>
-                      <h3>Related repair memory</h3>
+                      <h3>{t.diagnostics.relatedMemory}</h3>
                     </div>
                   </div>
                   <div className="memory-matches-list">
@@ -2946,38 +3825,500 @@ function DiagnosticsPage({
         </>
       )}
       </div>
+
+      {isTrackModalOpen && selected && (
+        <TrackCaseComponentModal
+          isOpen={isTrackModalOpen}
+          caseId={selected.id}
+          caseDevice={`${selected.brand} ${selected.model}`}
+          onClose={() => setIsTrackModalOpen(false)}
+          onSuccess={async () => {
+            if (onReloadDetail) await onReloadDetail()
+            flash?.('success', 'Component health logged and added to device diagnostics.')
+          }}
+          t={t}
+        />
+      )}
+
+      {updatingComponent && (
+        <UpdateCaseComponentHealthModal
+          component={updatingComponent}
+          onClose={() => setUpdatingComponent(null)}
+          onSuccess={async () => {
+            if (onReloadDetail) await onReloadDetail()
+            flash?.('success', 'Component health evidence updated.')
+          }}
+          t={t}
+        />
+      )}
     </div>
   )
 }
 
-function RecommendationView({ recommendation, stale }: { recommendation: Recommendation; stale: boolean }) {
+type VoiceLanguage = 'en' | 'hi'
+
+function VoiceBriefingPlayer({
+  recommendation,
+  caseDetail,
+  language,
+  flash,
+  t,
+}: {
+  recommendation: Recommendation
+  caseDetail: CaseDetail | null
+  language: DiagnosticLanguage
+  flash?: (type: 'success' | 'error' | 'info', message: string) => void
+  t: I18nCatalog
+}) {
+  const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'paused'>('idle')
+  // Strictly enforce Hindi or English voice output
+  const [voiceLang, setVoiceLang] = useState<VoiceLanguage>(() => (language === 'hi' || language === 'hi-Latn' ? 'hi' : 'en'))
+  const [cachedBriefings, setCachedBriefings] = useState<Record<string, string>>({})
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0)
+  const [showTranscript, setShowTranscript] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
+
+  useEffect(() => {
+    // Sync default voice language whenever app language changes
+    setVoiceLang(language === 'hi' || language === 'hi-Latn' ? 'hi' : 'en')
+  }, [language])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+
+    const updateVoices = () => {
+      const v = window.speechSynthesis.getVoices()
+      if (v && v.length > 0) setVoices(v)
+    }
+
+    updateVoices()
+    window.speechSynthesis.onvoiceschanged = updateVoices
+
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel()
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel()
+      }
+    }
+  }, [caseDetail?.id])
+
+  function getFallbackBriefingText(lang: VoiceLanguage): string {
+    const brand = caseDetail?.brand || 'Device'
+    const model = caseDetail?.model || ''
+    const issue = caseDetail?.issue_title || ''
+    const summary = recommendation.content.summary || ''
+    const hypotheses = recommendation.content.hypotheses || []
+    const nextChecks = recommendation.content.next_checks || []
+    const safety = recommendation.content.safety_notes?.[0] || ''
+
+    if (lang === 'hi') {
+      let text = `नमस्कार तकनीशियन, Revix वर्कशॉप डायग्नोस्टिक ब्रीफिंग। केस संख्या ${caseDetail?.id || ''}, डिवाइस ${brand} ${model}। रिपोर्ट की गई समस्या: ${issue}। `
+      if (summary) text += `डायग्नोस्टिक सारांश: ${summary} `
+      if (hypotheses.length > 0) {
+        text += `मुख्य संदिग्ध कारण ${hypotheses[0].fault} है, क्योंकि ${hypotheses[0].reasoning} `
+      }
+      if (nextChecks.length > 0) {
+        text += `प्राथमिक बेंच जांच ${nextChecks[0].name} है: ${nextChecks[0].instructions} `
+      }
+      if (safety) {
+        text += `सुरक्षा निर्देश: ${safety} `
+      } else {
+        text += `कृपया परीक्षण के दौरान ESD सुरक्षा और बेंच पावर सप्लाई का करंट लिमिटर सेट रखें।`
+      }
+      return text
+    }
+
+    let text = `Revix workshop diagnostic briefing for case ${caseDetail?.id || ''}, ${brand} ${model}. Reported hardware symptom: ${issue}. `
+    if (summary) text += `Diagnostic summary: ${summary} `
+    if (hypotheses.length > 0) {
+      text += `Primary hardware hypothesis is ${hypotheses[0].fault}. Engineering rationale: ${hypotheses[0].reasoning} `
+    }
+    if (nextChecks.length > 0) {
+      text += `Priority bench check is ${nextChecks[0].name}: ${nextChecks[0].instructions} `
+    }
+    if (safety) {
+      text += `Bench safety advisory: ${safety} `
+    } else {
+      text += `Maintain ESD grounding and set power supply current limits prior to probing.`
+    }
+    return text
+  }
+
+  const activeText = cachedBriefings[voiceLang] || getFallbackBriefingText(voiceLang)
+
+  function findVoiceForLanguage(lang: VoiceLanguage): SpeechSynthesisVoice | null {
+    const pool = voices.length > 0
+      ? voices
+      : typeof window !== 'undefined' && 'speechSynthesis' in window
+      ? window.speechSynthesis.getVoices()
+      : []
+    if (!pool || pool.length === 0) return null
+
+    if (lang === 'hi') {
+      return (
+        pool.find((v) => v.lang.toLowerCase().replace('_', '-').startsWith('hi') || v.name.toLowerCase().includes('hindi')) ||
+        pool.find((v) => v.lang.toLowerCase().includes('in')) ||
+        null
+      )
+    }
+    return (
+      pool.find((v) => v.lang.toLowerCase().replace('_', '-').startsWith('en-in')) ||
+      pool.find((v) => v.lang.toLowerCase().replace('_', '-').startsWith('en')) ||
+      null
+    )
+  }
+
+  function startSpeech(textToSpeak: string, lang: VoiceLanguage, speed: number) {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      setStatus('idle')
+      flash?.('info', 'Web Speech API is not supported in this browser. You can read the script transcript below.')
+      setShowTranscript(true)
+      return
+    }
+
+    window.speechSynthesis.cancel()
+
+    // Break into natural sentences to prevent Chrome/Safari speech synthesis timeout on full technical briefings
+    const chunks = textToSpeak.match(/[^.!?।\n]+[.!?।\n]+/g) || [textToSpeak]
+    let chunkIndex = 0
+
+    function speakNextChunk() {
+      if (chunkIndex >= chunks.length) {
+        setStatus('idle')
+        return
+      }
+
+      const chunkText = chunks[chunkIndex].trim()
+      if (!chunkText) {
+        chunkIndex++
+        speakNextChunk()
+        return
+      }
+
+      const utterance = new SpeechSynthesisUtterance(chunkText)
+      utterance.rate = speed
+      utterance.pitch = 1.0
+      utterance.lang = lang === 'hi' ? 'hi-IN' : 'en-US'
+
+      const matchedVoice = findVoiceForLanguage(lang)
+      if (matchedVoice) {
+        utterance.voice = matchedVoice
+      }
+
+      utterance.onstart = () => {
+        setStatus('playing')
+      }
+
+      utterance.onend = () => {
+        chunkIndex++
+        speakNextChunk()
+      }
+
+      utterance.onerror = (e) => {
+        if (e.error !== 'canceled') {
+          setStatus('idle')
+        }
+      }
+
+      window.speechSynthesis.speak(utterance)
+    }
+
+    speakNextChunk()
+  }
+
+  async function handlePlay() {
+    if (!caseDetail) return
+
+    if (status === 'paused') {
+      window.speechSynthesis.resume()
+      setStatus('playing')
+      return
+    }
+
+    if (cachedBriefings[voiceLang]) {
+      startSpeech(cachedBriefings[voiceLang], voiceLang, playbackSpeed)
+      return
+    }
+
+    setStatus('loading')
+    try {
+      const resp = await api.voiceBriefing(caseDetail.id, voiceLang)
+      const text = resp.briefing_text || getFallbackBriefingText(voiceLang)
+      setCachedBriefings((prev) => ({ ...prev, [voiceLang]: text }))
+      startSpeech(text, voiceLang, playbackSpeed)
+    } catch {
+      const fallback = getFallbackBriefingText(voiceLang)
+      setCachedBriefings((prev) => ({ ...prev, [voiceLang]: fallback }))
+      startSpeech(fallback, voiceLang, playbackSpeed)
+    }
+  }
+
+  function handlePause() {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.pause()
+      setStatus('paused')
+    }
+  }
+
+  function handleResume() {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.resume()
+      setStatus('playing')
+    }
+  }
+
+  function handleStop() {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel()
+      setStatus('idle')
+    }
+  }
+
+  function handleSpeedChange(newSpeed: number) {
+    setPlaybackSpeed(newSpeed)
+    if (status === 'playing') {
+      startSpeech(activeText, voiceLang, newSpeed)
+    }
+  }
+
+  async function handleVoiceLanguageSelect(newLang: VoiceLanguage) {
+    if (newLang === voiceLang) return
+    setVoiceLang(newLang)
+
+    if (status === 'playing' || status === 'paused') {
+      window.speechSynthesis.cancel()
+      setStatus('loading')
+
+      let textToPlay = cachedBriefings[newLang]
+      if (!textToPlay && caseDetail) {
+        try {
+          const resp = await api.voiceBriefing(caseDetail.id, newLang)
+          textToPlay = resp.briefing_text
+        } catch {
+          textToPlay = getFallbackBriefingText(newLang)
+        }
+      } else if (!textToPlay) {
+        textToPlay = getFallbackBriefingText(newLang)
+      }
+
+      setCachedBriefings((prev) => ({ ...prev, [newLang]: textToPlay }))
+      startSpeech(textToPlay, newLang, playbackSpeed)
+    }
+  }
+
+  function handleCopyTranscript() {
+    if (navigator.clipboard) {
+      void navigator.clipboard.writeText(activeText)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  return (
+    <div className={`voice-briefing-hud ${status === 'playing' ? 'is-playing' : ''}`}>
+      <div className="voice-briefing-header">
+        <div className="voice-title-col">
+          <div className="voice-badge-row">
+            <span className={`voice-status-indicator ${status}`} />
+            <span className="voice-hud-label">{t.voice.hudLabel}</span>
+            <span className="voice-lang-chip">
+              {voiceLang === 'hi' ? '🇮🇳 हिन्दी (Devanagari)' : '🌐 English'}
+            </span>
+          </div>
+          <p className="voice-briefing-sub">
+            {voiceLang === 'hi'
+              ? 'ऑटोमैटिक वॉयस असिस्टेंट द्वारा डायग्नोस्टिक सारांश का वाचन'
+              : t.voice.sub}
+          </p>
+        </div>
+
+        {/* Visual Equalizer Waves */}
+        <div className={`voice-visualizer ${status === 'playing' ? 'active' : ''}`} aria-hidden="true">
+          <span className="eq-bar bar-1" />
+          <span className="eq-bar bar-2" />
+          <span className="eq-bar bar-3" />
+          <span className="eq-bar bar-4" />
+          <span className="eq-bar bar-5" />
+          <span className="eq-bar bar-6" />
+          <span className="eq-bar bar-7" />
+          <span className="eq-bar bar-8" />
+        </div>
+      </div>
+
+      {/* Controls Row */}
+      <div className="voice-controls-bar">
+        <div className="voice-actions-left">
+          {status === 'loading' ? (
+            <button className="voice-btn voice-btn-primary" disabled>
+              <LoaderCircle size={15} className="spin" />
+              <span>{t.voice.synthesizing}</span>
+            </button>
+          ) : status === 'playing' ? (
+            <>
+              <button className="voice-btn voice-btn-pause" onClick={handlePause}>
+                <Pause size={14} />
+                <span>{t.voice.pause}</span>
+              </button>
+              <button className="voice-btn voice-btn-stop" onClick={handleStop}>
+                <Square size={14} />
+                <span>{t.voice.stop}</span>
+              </button>
+            </>
+          ) : status === 'paused' ? (
+            <>
+              <button className="voice-btn voice-btn-primary" onClick={handleResume}>
+                <Play size={14} />
+                <span>{t.voice.resume}</span>
+              </button>
+              <button className="voice-btn voice-btn-stop" onClick={handleStop}>
+                <Square size={14} />
+                <span>{t.voice.stop}</span>
+              </button>
+            </>
+          ) : (
+            <button className="voice-btn voice-btn-primary" onClick={handlePlay}>
+              <Volume2 size={15} />
+              <span>
+                {voiceLang === 'hi' ? t.voice.listenHi : t.voice.listenEn}
+              </span>
+            </button>
+          )}
+
+          {/* Voice Language Selector: Strictly Hindi & English only */}
+          <div className="voice-lang-selector" title="Switch voice language">
+            <Languages size={13} className="lang-icon" />
+            <button
+              type="button"
+              className={`voice-lang-btn ${voiceLang === 'en' ? 'active' : ''}`}
+              onClick={() => handleVoiceLanguageSelect('en')}
+            >
+              EN
+            </button>
+            <button
+              type="button"
+              className={`voice-lang-btn ${voiceLang === 'hi' ? 'active' : ''}`}
+              onClick={() => handleVoiceLanguageSelect('hi')}
+            >
+              हिन्दी
+            </button>
+          </div>
+        </div>
+
+        {/* Speed controls & Transcript toggle */}
+        <div className="voice-actions-right">
+          <div className="voice-speed-pill-group">
+            <span className="speed-label">{t.voice.speed}</span>
+            {[0.9, 1.0, 1.2].map((spd) => (
+              <button
+                key={spd}
+                type="button"
+                className={`speed-btn ${playbackSpeed === spd ? 'active' : ''}`}
+                onClick={() => handleSpeedChange(spd)}
+              >
+                {spd}x
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            className={`voice-btn-transcript ${showTranscript ? 'active' : ''}`}
+            onClick={() => setShowTranscript((v) => !v)}
+          >
+            <Radio size={13} />
+            <span>{showTranscript ? t.voice.hideTranscript : t.voice.transcript}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Collapsible Transcript Ticker Box */}
+      {showTranscript && (
+        <div className="voice-transcript-box">
+          <div className="transcript-head">
+            <div className="transcript-tags">
+              <span>{t.telemetry.spokenNarrative}</span>
+              <span className="transcript-lang">{voiceLang.toUpperCase()}</span>
+            </div>
+            <button
+              type="button"
+              className="transcript-copy-btn"
+              onClick={handleCopyTranscript}
+              title="Copy narrative text"
+            >
+              {copied ? t.voice.copied : t.voice.copy}
+            </button>
+          </div>
+          <p className="transcript-body">{activeText}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RecommendationView({
+  recommendation,
+  stale,
+  caseDetail,
+  settings,
+  flash,
+  t,
+}: {
+  recommendation: Recommendation
+  stale: boolean
+  caseDetail?: CaseDetail | null
+  settings?: AppSettings
+  flash?: (type: 'success' | 'error' | 'info', message: string) => void
+  t: I18nCatalog
+}) {
   const [expandedHypothesis, setExpandedHypothesis] = useState(0)
   const content = recommendation.content
   const isLive = recommendation.provider === 'gemini_api'
+  const modelBadge = isLive
+    ? (recommendation.model_name
+        ? recommendation.model_name.toUpperCase().replace('-IT', '').replace('GEMINI-', 'GEMINI ')
+        : 'GEMINI API')
+    : t.diagnostics.localRulesBadge
 
   return (
     <section className={`surface-card recommendation-card ${stale ? 'recommendation-stale' : ''}`}>
       <div className="recommendation-head">
         <div className="recommendation-head-icon"><Sparkles size={16} /></div>
         <div>
-          <h3>Evidence review</h3>
+          <h3>{t.diagnostics.evidenceReview}</h3>
         </div>
         <span className={`source-mode ${isLive ? 'source-mode-live' : 'source-mode-fallback'}`}>
-          {isLive ? 'GEMMA 4' : 'LOCAL RULES'}
+          {modelBadge}
         </span>
       </div>
 
       {stale && (
         <div className="stale-banner">
-          <AlertCircle size={14} /> New test evidence was added after this recommendation.
+          <AlertCircle size={14} /> {t.diagnostics.staleEvidenceBanner}
         </div>
       )}
 
-      <p className="recommendation-summary">{content.summary}</p>
+      {/* AI Voice Diagnostic Briefing HUD Player */}
+      <VoiceBriefingPlayer
+        recommendation={recommendation}
+        caseDetail={caseDetail ?? null}
+        language={settings?.language ?? 'en'}
+        flash={flash}
+        t={t}
+      />
+
+      <p className="recommendation-summary">{tContent(content.summary, settings?.language)}</p>
 
       <div className="hypothesis-section">
         <div className="recommendation-section-title">
-          <h4>Possible explanations</h4>
+          <h4>{t.diagnostics.possibleExplanations}</h4>
         </div>
         {content.hypotheses.map((hypothesis, index) => (
           <div
@@ -2990,32 +4331,32 @@ function RecommendationView({ recommendation, stale }: { recommendation: Recomme
             >
               <div className={`hypothesis-index ${hypothesis.likelihood}`}>{index + 1}</div>
               <div className="hypothesis-title-wrap">
-                <strong>{hypothesis.fault}</strong>
+                <strong>{tContent(hypothesis.fault, settings?.language)}</strong>
                 <span className={`likelihood-label likelihood-${hypothesis.likelihood}`}>
-                  {titleCase(hypothesis.likelihood)}
+                  {translations[settings?.language || 'en']?.diagnostics.likelihoods[hypothesis.likelihood] || titleCase(hypothesis.likelihood)}
                 </span>
               </div>
               <ChevronDown size={14} />
             </button>
             {expandedHypothesis === index && (
               <div className="hypothesis-detail">
-                <p>{hypothesis.reasoning}</p>
+                <p>{tContent(hypothesis.reasoning, settings?.language)}</p>
                 {hypothesis.supporting_evidence.length > 0 && (
                   <div className="evidence-chips-group">
-                    <span className="evidence-group-label">SUPPORTING</span>
+                    <span className="evidence-group-label">{t.diagnostics.supporting}</span>
                     {hypothesis.supporting_evidence.map((evidence, i) => (
                       <div className="evidence-chip positive" key={`${evidence}-${i}`}>
-                        <Check size={12} /> {evidence}
+                        <Check size={12} /> {tContent(evidence, settings?.language)}
                       </div>
                     ))}
                   </div>
                 )}
                 {hypothesis.contradicting_evidence.length > 0 && (
                   <div className="evidence-chips-group">
-                    <span className="evidence-group-label">CONTRADICTING</span>
+                    <span className="evidence-group-label">{t.diagnostics.contradicting}</span>
                     {hypothesis.contradicting_evidence.map((evidence, i) => (
                       <div className="evidence-chip caution" key={`${evidence}-${i}`}>
-                        <AlertCircle size={12} /> {evidence}
+                        <AlertCircle size={12} /> {tContent(evidence, settings?.language)}
                       </div>
                     ))}
                   </div>
@@ -3028,10 +4369,10 @@ function RecommendationView({ recommendation, stale }: { recommendation: Recomme
 
       <div className="next-checks-section">
         <div className="recommendation-section-title">
-          <h4>Recommended next checks</h4>
+          <h4>{t.diagnostics.safeNextChecks}</h4>
         </div>
         {content.next_checks.map((check, index) => (
-          <NextCheckCard check={check} index={index} key={`${check.name}-${index}`} />
+          <NextCheckCard check={check} index={index} key={`${check.name}-${index}`} lang={settings?.language} t={t} />
         ))}
       </div>
 
@@ -3039,11 +4380,11 @@ function RecommendationView({ recommendation, stale }: { recommendation: Recomme
         <div className="missing-info-box">
           <div className="missing-info-heading">
             <CircleHelp size={14} />
-            <strong>Missing information</strong>
+            <strong>{t.diagnostics.missingInfoTitle}</strong>
           </div>
           <ul>
             {content.missing_information.map((item, index) => (
-              <li key={`${item}-${index}`}>{item}</li>
+              <li key={`${item}-${index}`}>{tContent(item, settings?.language)}</li>
             ))}
           </ul>
         </div>
@@ -3051,7 +4392,7 @@ function RecommendationView({ recommendation, stale }: { recommendation: Recomme
 
       {recommendation.sources.length > 0 && (
         <div className="source-reference-section">
-          <span className="evidence-group-label">REFERENCE NOTES</span>
+          <span className="evidence-group-label">{t.diagnostics.sourcesUsed}</span>
           {recommendation.sources.map((source) => (
             <div className="source-reference" key={source.id}>
               <div>
@@ -3069,34 +4410,46 @@ function RecommendationView({ recommendation, stale }: { recommendation: Recomme
       )}
 
       <div className="recommendation-footer">
-        <span>{dateTimeLabel(recommendation.generated_at)}</span>
+        <span>{dateTimeLabel(recommendation.generated_at, settings?.language)}</span>
         <span>{recommendation.model_name}</span>
       </div>
     </section>
   )
 }
 
-function NextCheckCard({ check, index }: { check: NextCheck; index: number }) {
+function NextCheckCard({
+  check,
+  index,
+  lang = 'en',
+  t,
+}: {
+  check: NextCheck
+  index: number
+  lang?: DiagnosticLanguage
+  t?: I18nCatalog
+}) {
   const [open, setOpen] = useState(index === 0)
+  const proLabel = t?.diagnostics.proOnly || 'Pro only'
+  const recordLabel = t?.diagnostics.recordLabel || 'Record:'
   return (
     <div className={`next-check-item ${open ? 'next-check-open' : ''}`}>
       <button className="next-check-head" onClick={() => setOpen((v) => !v)}>
         <span className="next-check-number">{String(index + 1).padStart(2, '0')}</span>
         <span className="next-check-main">
-          <strong>{check.name}</strong>
-          <small>{check.purpose}</small>
+          <strong>{tContent(check.name, lang)}</strong>
+          <small>{tContent(check.purpose, lang)}</small>
         </span>
         <span className={`safety-level safety-${check.safety_level}`}>
-          {check.safety_level === 'professional_only' ? 'Pro only' : check.safety_level}
+          {check.safety_level === 'professional_only' ? proLabel : check.safety_level}
         </span>
         <ChevronDown size={14} />
       </button>
       {open && (
         <div className="next-check-body">
-          <p>{check.instructions}</p>
+          <p>{tContent(check.instructions, lang)}</p>
           <div className="record-this">
             <ClipboardCheck size={13} />
-            <span><strong>Record:</strong> {check.what_to_record}</span>
+            <span><strong>{recordLabel}</strong> {tContent(check.what_to_record, lang)}</span>
           </div>
         </div>
       )}
@@ -3234,7 +4587,7 @@ function MemoryCircuitMapOverlay({ animated }: { animated: boolean }) {
   )
 }
 
-function MemoryHoloOverlay({ animated }: { animated: boolean }) {
+function MemoryHoloOverlay({ animated, lang = 'en' }: { animated: boolean; lang?: DiagnosticLanguage }) {
   return (
     <div className="memory-holo-anchor" aria-hidden="true">
       {animated && (
@@ -3248,7 +4601,7 @@ function MemoryHoloOverlay({ animated }: { animated: boolean }) {
       )}
       <div className="memory-holo-tag">
         <span className="memory-tag-dot" />
-        <span>NEURAL BLUEPRINT ARCHIVE // SCHEMATIC MEMORY</span>
+        <span>{translations[lang]?.telemetry.memoryHolo || 'NEURAL BLUEPRINT ARCHIVE // SCHEMATIC MEMORY'}</span>
       </div>
     </div>
   )
@@ -3261,6 +4614,7 @@ function MemoryPage({
   onOpen,
   onDelete,
   settings,
+  t,
 }: {
   cases: RepairCase[]
   query: string
@@ -3268,6 +4622,7 @@ function MemoryPage({
   onOpen: (id: string, tab?: NavId) => void
   onDelete: (id: string, brand: string, model: string) => void
   settings?: AppSettings
+  t: I18nCatalog
 }) {
   const animated = settings?.animationsEnabled ?? true
 
@@ -3283,7 +4638,7 @@ function MemoryPage({
       <MemoryCircuitMapOverlay animated={animated} />
 
       {/* Holographic blueprint scanbeam & reticle */}
-      <MemoryHoloOverlay animated={animated} />
+      <MemoryHoloOverlay animated={animated} lang={settings?.language} />
 
       {/* Optical laser scanner line */}
       {animated && <div className="memory-laser-scanner" aria-hidden="true" />}
@@ -3308,8 +4663,8 @@ function MemoryPage({
             )}
             <div className="probe-tooltip">
               <span className="probe-code">{tp.code}</span>
-              <span className="probe-desc">{tp.label}</span>
-              <span className="probe-val" style={{ color: tp.color }}>{tp.status}</span>
+              <span className="probe-desc">{tContent(tp.label, settings?.language)}</span>
+              <span className="probe-val" style={{ color: tp.color }}>{tContent(tp.status, settings?.language)}</span>
             </div>
           </div>
         ))}
@@ -3320,13 +4675,13 @@ function MemoryPage({
         <div className="memory-hud-header">
           <div className="memory-telemetry-chip">
             <span className="memory-telemetry-dot" />
-            <span>HISTORICAL REPAIR ARCHIVE // NEURAL REPAIR MEMORY</span>
+            <span>{t.memory.telemetry}</span>
           </div>
           <div className="memory-header-row">
             <div className="memory-title-wrap">
-              <h1 className="memory-title">Repair memory</h1>
+              <h1 className="memory-title">{t.memory.title}</h1>
               <span className="memory-count-badge">
-                <History size={14} /> {cases.length} completed cases
+                <History size={14} /> {cases.length} {t.memory.matchesCount}
               </span>
             </div>
           </div>
@@ -3338,7 +4693,7 @@ function MemoryPage({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search completed devices, confirmed faults, or outcomes..."
+            placeholder={t.memory.searchPlaceholder}
             className="memory-search-input"
           />
           {query && (
@@ -3369,24 +4724,24 @@ function MemoryPage({
                     </div>
                     <div className="memory-card-main">
                       <div className="memory-card-title-row">
-                        <strong className="memory-card-title">{item.issue_title}</strong>
+                        <strong className="memory-card-title">{tContent(item.issue_title, settings?.language)}</strong>
                         <span className="memory-card-id">{item.id}</span>
                       </div>
                       <div className="memory-device-meta">
                         <span>{item.brand} {item.model}</span>
                         <span className="meta-sep">·</span>
-                        <span>{dateLabel(item.updated_at)}</span>
+                        <span>{dateLabel(item.updated_at, settings?.language)}</span>
                       </div>
                       <div className="memory-fault-pill">
                         <CheckCircle2 size={14} />
-                        <span>Confirmed: <strong>{item.confirmed_fault}</strong></span>
+                        <span>{t.memory.confirmedLabel} <strong>{tContent(item.confirmed_fault, settings?.language)}</strong></span>
                       </div>
-                      <p className="memory-action-desc">{item.repair_action}</p>
+                      <p className="memory-action-desc">{tContent(item.repair_action, settings?.language)}</p>
                     </div>
 
                     <div className="memory-card-outcome-pod">
-                      <span className="outcome-pod-label">VERIFIED OUTCOME</span>
-                      <p className="outcome-pod-text">{item.outcome || 'None'}</p>
+                      <span className="outcome-pod-label">{t.memory.verifiedOutcomeLabel}</span>
+                      <p className="outcome-pod-text">{tContent(item.outcome || t.memory.none, settings?.language)}</p>
                     </div>
 
                     <div className="memory-card-actions" onClick={(e) => e.stopPropagation()}>
@@ -3407,13 +4762,1738 @@ function MemoryPage({
             <div className="surface-card memory-empty-card">
               <EmptyState
                 icon={History}
-                title="No completed repair records"
-                description="Devices marked as completed with a confirmed fault appear here."
+                title={t.memory.emptyTitle}
+                description={t.memory.emptyDesc}
               />
             </div>
           )}
         </div>
       </div>
     </div>
+  )
+}
+
+/* =========================================================================
+   PHASE 2: REUSE & RESALE MANAGER — COMPONENTS PAGE & MODALS
+   ========================================================================= */
+
+function ComponentsPage({
+  settings,
+  t,
+  onNavigateCase,
+  flash,
+}: {
+  settings?: AppSettings
+  t: I18nCatalog
+  onNavigateCase?: (caseId: string) => void
+  flash: (kind: 'success' | 'error' | 'info', text: string) => void
+}) {
+  const [components, setComponents] = useState<Component[]>([])
+  const [summary, setSummary] = useState<ComponentSummary | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [healthFilter, setHealthFilter] = useState('all')
+  const [resaleFilter, setResaleFilter] = useState('all')
+  const [reuseEligibleOnly, setReuseEligibleOnly] = useState(false)
+
+  // Modals state
+  const [isRegisterOpen, setIsRegisterOpen] = useState(false)
+  const [editingComponent, setEditingComponent] = useState<Component | null>(null)
+  const [reuseModal, setReuseModal] = useState<{
+    component: Component
+    action: 'reserve' | 'use' | 'release'
+  } | null>(null)
+  const [resaleModal, setResaleModal] = useState<Component | null>(null)
+  const [deleteModal, setDeleteModal] = useState<Component | null>(null)
+
+  const animated = settings?.animationsEnabled ?? true
+
+  const loadData = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [comps, sum] = await Promise.all([
+        api.components({
+          q: searchQuery,
+          category: categoryFilter,
+          health_status: healthFilter,
+          resale_status: resaleFilter,
+          reuse_eligible_only: reuseEligibleOnly,
+        }),
+        api.componentSummary(),
+      ])
+      setComponents(comps)
+      setSummary(sum)
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadData()
+  }, [categoryFilter, healthFilter, resaleFilter, reuseEligibleOnly])
+
+  const handleSearchSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    void loadData()
+  }
+
+  return (
+    <div className="components-fullscreen-layout">
+      {/* Background ambient lighting */}
+      <div className="memory-bg-layer" />
+      <div className="memory-ambient-mask" aria-hidden="true" />
+      <MemoryCircuitMapOverlay animated={animated} />
+
+      <div className="components-negative-hud">
+        {/* Header HUD Bar */}
+        <div className="components-hud-header">
+          <div className="components-header-left">
+            <div className="memory-telemetry-chip">
+              <span className="memory-telemetry-dot" />
+              <span>{t.components.telemetry}</span>
+            </div>
+            <div className="components-title-row">
+              <h1 className="components-title">{t.components.title}</h1>
+              <span className="components-count-badge">
+                <Box size={14} /> {components.length} {t.components.title.split(' ')[0]}
+              </span>
+            </div>
+          </div>
+          <button
+            className="button button-primary components-register-btn"
+            onClick={() => {
+              playUiSound('click', settings || DEFAULT_SETTINGS)
+              setIsRegisterOpen(true)
+            }}
+          >
+            <Plus size={16} />
+            <span>{t.components.registerBtn}</span>
+          </button>
+        </div>
+
+        {/* Top KPI Statistics Summary Cards */}
+        {summary && (
+          <div className="component-stat-grid">
+            <div className="component-stat-card">
+              <div className="stat-card-icon stat-icon-blue">
+                <Box size={18} />
+              </div>
+              <div className="stat-card-meta">
+                <span className="stat-card-label">{t.components.totalComponents}</span>
+                <span className="stat-card-num">{summary.total_components}</span>
+                <span className="stat-card-sub">({summary.total_quantity} units in stock)</span>
+              </div>
+            </div>
+
+            <div className="component-stat-card">
+              <div className="stat-card-icon stat-icon-emerald">
+                <ShieldCheck size={18} />
+              </div>
+              <div className="stat-card-meta">
+                <span className="stat-card-label">{t.components.reusableStock}</span>
+                <span className="stat-card-num">{summary.reuse_eligible_count}</span>
+                <span className="stat-card-sub">{t.components.reusableStockDesc.slice(0, 32)}...</span>
+              </div>
+            </div>
+
+            <div className="component-stat-card">
+              <div className="stat-card-icon stat-icon-amber">
+                <Wrench size={18} />
+              </div>
+              <div className="stat-card-meta">
+                <span className="stat-card-label">{t.components.reservedBench}</span>
+                <span className="stat-card-num">{summary.reserved_count}</span>
+                <span className="stat-card-sub">{t.components.reservedBenchDesc.slice(0, 32)}...</span>
+              </div>
+            </div>
+
+            <div className="component-stat-card">
+              <div className="stat-card-icon stat-icon-violet">
+                <DollarSign size={18} />
+              </div>
+              <div className="stat-card-meta">
+                <span className="stat-card-label">{t.components.approvedResale}</span>
+                <span className="stat-card-num">{summary.resale_approved_count}</span>
+                <span className="stat-card-sub">
+                  ({summary.resale_under_review_count} {t.components.resaleStatuses.under_review})
+                </span>
+              </div>
+            </div>
+
+            <div className="component-stat-card">
+              <div className="stat-card-icon stat-icon-rose">
+                <AlertCircle size={18} />
+              </div>
+              <div className="stat-card-meta">
+                <span className="stat-card-label">{t.components.needsTesting}</span>
+                <span className="stat-card-num">{summary.needs_testing_count}</span>
+                <span className="stat-card-sub">{t.components.needsTestingDesc.slice(0, 32)}...</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Filter and Search Bar */}
+        <div className="components-toolbar-card">
+          <form className="components-search-wrap" onSubmit={handleSearchSubmit}>
+            <Search size={16} className="components-search-icon" />
+            <input
+              type="text"
+              className="components-search-input"
+              placeholder={t.components.searchPlaceholder}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="components-clear-btn"
+                onClick={() => {
+                  setSearchQuery('')
+                  void api.components({
+                    q: '',
+                    category: categoryFilter,
+                    health_status: healthFilter,
+                    resale_status: resaleFilter,
+                    reuse_eligible_only: reuseEligibleOnly,
+                  }).then(setComponents)
+                }}
+              >
+                <X size={14} />
+              </button>
+            )}
+          </form>
+
+          <div className="components-filter-pills">
+            {/* Category Filter */}
+            <select
+              className="components-filter-select"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+            >
+              <option value="all">{t.components.allCategories}</option>
+              <option value="screen">{t.components.categories.screen}</option>
+              <option value="battery">{t.components.categories.battery}</option>
+              <option value="mother_board">{t.components.categories.mother_board}</option>
+              <option value="charging_port">{t.components.categories.charging_port}</option>
+              <option value="camera">{t.components.categories.camera}</option>
+              <option value="audio">{t.components.categories.audio}</option>
+              <option value="sensor">{t.components.categories.sensor}</option>
+              <option value="other">{t.components.categories.other}</option>
+            </select>
+
+            {/* Health Filter */}
+            <select
+              className="components-filter-select"
+              value={healthFilter}
+              onChange={(e) => setHealthFilter(e.target.value)}
+            >
+              <option value="all">{t.components.allHealth}</option>
+              <option value="working">{t.components.healthStatuses.working}</option>
+              <option value="needs_testing">{t.components.healthStatuses.needs_testing}</option>
+              <option value="faulty">{t.components.healthStatuses.faulty}</option>
+              <option value="unknown">{t.components.healthStatuses.unknown}</option>
+            </select>
+
+            {/* Resale Filter */}
+            <select
+              className="components-filter-select"
+              value={resaleFilter}
+              onChange={(e) => setResaleFilter(e.target.value)}
+            >
+              <option value="all">{t.components.allResale}</option>
+              <option value="approved">{t.components.resaleStatuses.approved}</option>
+              <option value="under_review">{t.components.resaleStatuses.under_review}</option>
+              <option value="not_eligible">{t.components.resaleStatuses.not_eligible}</option>
+            </select>
+
+            {/* Reusable Toggle */}
+            <label className="components-reuse-toggle-label">
+              <input
+                type="checkbox"
+                checked={reuseEligibleOnly}
+                onChange={(e) => setReuseEligibleOnly(e.target.checked)}
+              />
+              <span>{t.components.reuseEligibleOnly}</span>
+            </label>
+          </div>
+        </div>
+
+        {/* Content Body: Loading, Error, Empty or Grid */}
+        {loading ? (
+          <div className="components-loading-card">
+            <LoaderCircle size={28} className="spinning" />
+            <p>Scanning bench component registry...</p>
+          </div>
+        ) : error ? (
+          <div className="components-error-card">
+            <AlertTriangle size={24} />
+            <p>{error}</p>
+            <button className="button button-secondary" onClick={() => void loadData()}>
+              Retry
+            </button>
+          </div>
+        ) : components.length === 0 ? (
+          <div className="surface-card components-empty-card">
+            <EmptyState
+              icon={PackageSearch}
+              title={t.components.emptyTitle}
+              description={t.components.emptyDesc}
+            />
+          </div>
+        ) : (
+          <div className="components-grid">
+            {components.map((comp) => {
+              const availableQty = Math.max(0, comp.quantity - comp.reserved_quantity - comp.used_quantity)
+              return (
+                <div key={comp.id} className="component-card">
+                  <div className="component-card-top">
+                    <div className="component-header-meta">
+                      <div className="component-id-chip">
+                        <Tag size={12} />
+                        <span>{comp.id}</span>
+                        <span className="component-part-num">· {comp.part_number}</span>
+                      </div>
+                      <div className="component-badges-row">
+                        {/* Health Badge */}
+                        <span className={`badge-pill badge-health badge-health-${comp.health_status}`}>
+                          {t.components.healthStatuses[comp.health_status] || comp.health_status}
+                        </span>
+                        {/* Resale Badge */}
+                        <span className={`badge-pill badge-resale badge-resale-${comp.resale_status}`}>
+                          {t.components.resaleStatuses[comp.resale_status] || comp.resale_status}
+                        </span>
+                      </div>
+                    </div>
+
+                    <h3 className="component-card-title">{tContent(comp.name, settings?.language)}</h3>
+
+                    <div className="component-info-meta">
+                      <span className="component-category-tag">
+                        {tContent(comp.category, settings?.language)}
+                      </span>
+                      {comp.location && (
+                        <span className="component-location-tag">
+                          📍 {comp.location}
+                        </span>
+                      )}
+                      <span className="component-condition-tag">
+                        ✨ {comp.condition}
+                      </span>
+                    </div>
+
+                    {/* Source Device / Case association */}
+                    {(comp.source_device || comp.case_id) && (
+                      <div className="component-source-link">
+                        <span className="source-label">{t.components.sourceDeviceLabel}:</span>
+                        <span className="source-name">
+                          {comp.source_device || ''}
+                          {comp.case_id && (
+                            <button
+                              type="button"
+                              className="source-case-btn"
+                              onClick={() => onNavigateCase && onNavigateCase(comp.case_id!)}
+                            >
+                              ({comp.case_id})
+                            </button>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Stock Quantities Bar */}
+                  <div className="component-stock-bar">
+                    <div className="stock-pod stock-pod-available">
+                      <span className="stock-num">{availableQty}</span>
+                      <span className="stock-label">{t.components.stockAvailable}</span>
+                    </div>
+                    <div className="stock-pod stock-pod-reserved">
+                      <span className="stock-num">{comp.reserved_quantity}</span>
+                      <span className="stock-label">{t.components.stockReserved}</span>
+                    </div>
+                    <div className="stock-pod stock-pod-used">
+                      <span className="stock-num">{comp.used_quantity}</span>
+                      <span className="stock-label">{t.components.stockUsed}</span>
+                    </div>
+                    <div className="stock-pod stock-pod-total">
+                      <span className="stock-num">{comp.quantity}</span>
+                      <span className="stock-label">Total</span>
+                    </div>
+                  </div>
+
+                  {/* Test Evidence Section */}
+                  <div className="component-evidence-section">
+                    <div className="evidence-header">
+                      <span className="evidence-title">{t.components.evidenceLabel}:</span>
+                      {comp.tested_at && (
+                        <span className="evidence-date">
+                          {new Date(comp.tested_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                    <p className="evidence-text">
+                      {comp.test_evidence
+                        ? tContent(comp.test_evidence, settings?.language)
+                        : t.components.noEvidence}
+                    </p>
+                  </div>
+
+                  {/* Reuse Availability Status Banner */}
+                  <div className="component-reuse-banner">
+                    {comp.is_reuse_eligible ? (
+                      <div className="reuse-status-badge reuse-eligible">
+                        <CheckCircle2 size={14} />
+                        <span>
+                          {availableQty > 0
+                            ? t.components.reuseStatuses.available
+                            : comp.reserved_quantity > 0
+                            ? t.components.reuseStatuses.reserved
+                            : t.components.reuseStatuses.depleted}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="reuse-status-badge reuse-ineligible">
+                        <AlertCircle size={14} />
+                        <span>
+                          Ineligible for Reuse (
+                          {comp.health_status !== 'working'
+                            ? t.components.healthStatuses[comp.health_status]
+                            : comp.condition === 'Damaged'
+                            ? 'Damaged'
+                            : 'Needs Test Evidence'}
+                          )
+                        </span>
+                      </div>
+                    )}
+                    {comp.reuse_notes && (
+                      <p className="reuse-notes-snippet">{comp.reuse_notes}</p>
+                    )}
+                  </div>
+
+                  {/* Resale Review Summary (if reviewed or priced) */}
+                  {comp.resale_status === 'approved' && (
+                    <div className="component-resale-banner">
+                      <div className="resale-approved-row">
+                        <DollarSign size={14} />
+                        <strong>
+                          {comp.resale_price ? `$${comp.resale_price.toFixed(2)}` : 'Approved Resale'}
+                        </strong>
+                        {comp.resale_condition && <span>· {comp.resale_condition}</span>}
+                      </div>
+                      {comp.resale_reason && (
+                        <p className="resale-reason-text">"{comp.resale_reason}"</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Card Bottom Actions */}
+                  <div className="component-card-actions">
+                    <div className="action-group-reuse">
+                      {/* Reserve Button */}
+                      <button
+                        className="button-pill button-pill-reserve"
+                        disabled={!comp.is_reuse_eligible || availableQty <= 0}
+                        title={
+                          !comp.is_reuse_eligible
+                            ? 'Must be verified working with recorded test evidence before reservation'
+                            : availableQty <= 0
+                            ? 'No available units left to reserve'
+                            : 'Reserve stock for a repair case'
+                        }
+                        onClick={() => {
+                          playUiSound('click', settings || DEFAULT_SETTINGS)
+                          setReuseModal({ component: comp, action: 'reserve' })
+                        }}
+                      >
+                        <Wrench size={13} />
+                        <span>{t.components.btnReserve}</span>
+                      </button>
+
+                      {/* Use Button */}
+                      <button
+                        className="button-pill button-pill-use"
+                        disabled={availableQty <= 0 && comp.reserved_quantity <= 0}
+                        title="Mark units as consumed/installed in repair"
+                        onClick={() => {
+                          playUiSound('click', settings || DEFAULT_SETTINGS)
+                          setReuseModal({ component: comp, action: 'use' })
+                        }}
+                      >
+                        <Check size={13} />
+                        <span>{t.components.btnUse}</span>
+                      </button>
+
+                      {/* Release Button */}
+                      {comp.reserved_quantity > 0 && (
+                        <button
+                          className="button-pill button-pill-release"
+                          title="Release reserved units back to available pool"
+                          onClick={() => {
+                            playUiSound('click', settings || DEFAULT_SETTINGS)
+                            setReuseModal({ component: comp, action: 'release' })
+                          }}
+                        >
+                          <RotateCcw size={13} />
+                          <span>{t.components.btnRelease}</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="action-group-resale">
+                      <button
+                        className="button-pill button-pill-review"
+                        onClick={() => {
+                          playUiSound('click', settings || DEFAULT_SETTINGS)
+                          setResaleModal(comp)
+                        }}
+                      >
+                        <DollarSign size={13} />
+                        <span>{t.components.btnReviewResale}</span>
+                      </button>
+
+                      <button
+                        className="icon-button-sm"
+                        title={t.components.btnEdit}
+                        onClick={() => {
+                          playUiSound('click', settings || DEFAULT_SETTINGS)
+                          setEditingComponent(comp)
+                        }}
+                      >
+                        <Settings size={14} />
+                      </button>
+
+                      <button
+                        className="icon-button-sm delete-btn-sm"
+                        title={t.components.btnDelete}
+                        onClick={() => {
+                          playUiSound('click', settings || DEFAULT_SETTINGS)
+                          setDeleteModal(comp)
+                        }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Modals rendered via React Portal into document.body for perfect centering */}
+      {isRegisterOpen && (
+        <ComponentRegisterModal
+          isOpen={isRegisterOpen}
+          onClose={() => setIsRegisterOpen(false)}
+          onSuccess={() => {
+            void loadData()
+            flash('success', 'Component registered successfully.')
+          }}
+          t={t}
+        />
+      )}
+
+      {editingComponent && (
+        <ComponentEditModal
+          component={editingComponent}
+          onClose={() => setEditingComponent(null)}
+          onSuccess={() => {
+            void loadData()
+            flash('success', 'Component updated successfully.')
+          }}
+          t={t}
+        />
+      )}
+
+      {reuseModal && (
+        <ComponentReuseModal
+          component={reuseModal.component}
+          action={reuseModal.action}
+          onClose={() => setReuseModal(null)}
+          onSuccess={() => {
+            void loadData()
+            flash('success', `Reuse ${reuseModal.action} recorded.`)
+          }}
+          t={t}
+        />
+      )}
+
+      {resaleModal && (
+        <ComponentResaleReviewModal
+          component={resaleModal}
+          onClose={() => setResaleModal(null)}
+          onSuccess={() => {
+            void loadData()
+            flash('success', 'Resale review decision updated.')
+          }}
+          t={t}
+        />
+      )}
+
+      {deleteModal && (
+        <ComponentDeleteModal
+          component={deleteModal}
+          onClose={() => setDeleteModal(null)}
+          onSuccess={() => {
+            void loadData()
+            flash('success', 'Component deleted.')
+          }}
+          t={t}
+        />
+      )}
+    </div>
+  )
+}
+
+/* =========================================================================
+   PHASE 1: COMPONENT HEALTH TRACKER MODALS (DIAGNOSTICS)
+   ========================================================================= */
+
+const COMMON_COMPONENT_NAMES = [
+  'Primary PMIC / Charging IC',
+  'USB-C Port / Daughterboard',
+  'OLED / Digitizer Assembly',
+  'Battery Pack (Li-Ion / Li-Po)',
+  'Main Logic Board (MLB)',
+  'Sub-board / Interposer Flex',
+  'Primary Camera Module',
+  'Front Facing Camera Module',
+  'Audio Codec / Loudspeaker',
+  'Display Backlight Driver',
+  'Taptic Engine / Vibration Motor',
+  '5V / 3.3V Step-Down Buck Converter',
+]
+
+const MULTIMETER_PRESETS = [
+  'Diode mode to GND: 0.425V (Normal reference)',
+  'Direct short to GND: 0.002V on VDD_MAIN rail',
+  'Excessive current draw: 1.85A at 4.2V injected',
+  'Impedance to GND: 86kΩ (Within OEM range)',
+  'No voltage drop: 0.00V / Open line on VBUS 5.0V',
+  'Capacitor bank hot spot detected under thermal imaging',
+]
+
+function TrackCaseComponentModal({
+  isOpen,
+  caseId,
+  caseDevice,
+  onClose,
+  onSuccess,
+  t,
+}: {
+  isOpen: boolean
+  caseId: string
+  caseDevice: string
+  onClose: () => void
+  onSuccess: () => Promise<void> | void
+  t: I18nCatalog
+}) {
+  const [name, setName] = useState('')
+  const [partNumber, setPartNumber] = useState('')
+  const [category, setCategory] = useState('mother_board')
+  const [condition, setCondition] = useState('Good')
+  const [healthStatus, setHealthStatus] = useState<ComponentHealthStatus>('needs_testing')
+  const [testEvidence, setTestEvidence] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  if (!isOpen) return null
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!name.trim()) {
+      setError('Component name is required.')
+      return
+    }
+    // Phase 1 Requirement: working or faulty must have actual test evidence recorded
+    if ((healthStatus === 'working' || healthStatus === 'faulty') && !testEvidence.trim()) {
+      setError(t.diagnostics.testEvidenceRequired || 'Working or Faulty status requires actual observed multimeter readings or test evidence.')
+      return
+    }
+
+    setSubmitting(true)
+    setError(null)
+    try {
+      await api.addCaseComponent(caseId, {
+        name: name.trim(),
+        part_number: partNumber.trim() || undefined,
+        category,
+        quantity: 1,
+        condition,
+        source_device: caseDevice,
+        case_id: caseId,
+        health_status: healthStatus,
+        test_evidence: testEvidence.trim() || null,
+      })
+      onClose()
+      await onSuccess()
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return createPortal(
+    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal-card component-form-modal" role="dialog" aria-modal="true">
+        <div className="modal-head">
+          <div>
+            <span className="eyebrow">DIAGNOSTICS // TRACK COMPONENT HEALTH</span>
+            <h2>{t.diagnostics.trackComponent} — {caseId}</h2>
+            <p className="modal-subhead">{caseDevice}</p>
+          </div>
+          <button className="icon-button" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="modal-body-form">
+          {error && (
+            <div className="form-error-banner">
+              <AlertTriangle size={15} />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div className="form-grid-2">
+            <div className="field-group">
+              <label>Component Name *</label>
+              <input
+                type="text"
+                list="case-component-name-suggestions"
+                placeholder="e.g. Primary PMIC / Charging IC"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+              <datalist id="case-component-name-suggestions">
+                {COMMON_COMPONENT_NAMES.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+            </div>
+            <div className="field-group">
+              <label>Part # / Model</label>
+              <input
+                type="text"
+                placeholder="e.g. BQ25601 / PM8150"
+                value={partNumber}
+                onChange={(e) => setPartNumber(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="form-grid-3">
+            <div className="field-group">
+              <label>Category</label>
+              <select value={category} onChange={(e) => setCategory(e.target.value)}>
+                <option value="mother_board">{t.components.categories.mother_board}</option>
+                <option value="battery">{t.components.categories.battery}</option>
+                <option value="screen">{t.components.categories.screen}</option>
+                <option value="charging_port">{t.components.categories.charging_port}</option>
+                <option value="camera">{t.components.categories.camera}</option>
+                <option value="audio">{t.components.categories.audio}</option>
+                <option value="sensor">{t.components.categories.sensor}</option>
+                <option value="other">{t.components.categories.other}</option>
+              </select>
+            </div>
+            <div className="field-group">
+              <label>Physical Condition</label>
+              <select value={condition} onChange={(e) => setCondition(e.target.value)}>
+                <option value="Good">{t.components.conditions.Good}</option>
+                <option value="LikeNew">{t.components.conditions.LikeNew}</option>
+                <option value="Fair">{t.components.conditions.Fair}</option>
+                <option value="Damaged">{t.components.conditions.Damaged}</option>
+              </select>
+            </div>
+            <div className="field-group">
+              <label>Health Status</label>
+              <select
+                value={healthStatus}
+                onChange={(e) => setHealthStatus(e.target.value as ComponentHealthStatus)}
+              >
+                <option value="needs_testing">{t.components.healthStatuses.needs_testing}</option>
+                <option value="working">{t.components.healthStatuses.working}</option>
+                <option value="faulty">{t.components.healthStatuses.faulty}</option>
+                <option value="unknown">{t.components.healthStatuses.unknown}</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="field-group">
+            <div className="field-label-row">
+              <label>Multimeter / Test Evidence {(healthStatus === 'working' || healthStatus === 'faulty') && <span className="label-req">* (Required)</span>}</label>
+              <span className="field-hint">Diode drop, rail voltage, impedance</span>
+            </div>
+            <textarea
+              rows={3}
+              placeholder="Record actual test evidence: e.g. Diode mode to GND: 0.425V, 5.0V VBUS rail verified stable under 1.2A load..."
+              value={testEvidence}
+              onChange={(e) => setTestEvidence(e.target.value)}
+              required={healthStatus === 'working' || healthStatus === 'faulty'}
+            />
+            <div className="quick-presets-box">
+              <span className="presets-label">Quick multimeter presets:</span>
+              <div className="presets-pills">
+                {MULTIMETER_PRESETS.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    className="preset-chip"
+                    onClick={() => {
+                      setTestEvidence((prev) => (prev ? `${prev}; ${preset}` : preset))
+                    }}
+                  >
+                    + {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="modal-actions-row">
+            <button type="button" className="button button-secondary" onClick={onClose}>
+              {t.components.cancelBtn}
+            </button>
+            <button type="submit" className="button button-primary" disabled={submitting}>
+              {submitting ? 'Tracking...' : t.diagnostics.trackComponent}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+function UpdateCaseComponentHealthModal({
+  component,
+  onClose,
+  onSuccess,
+  t,
+}: {
+  component: Component
+  onClose: () => void
+  onSuccess: () => Promise<void> | void
+  t: I18nCatalog
+}) {
+  const [healthStatus, setHealthStatus] = useState<ComponentHealthStatus>(component.health_status)
+  const [condition, setCondition] = useState(component.condition)
+  const [testEvidence, setTestEvidence] = useState(component.test_evidence || '')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    // Phase 1 Requirement: working or faulty must have actual test evidence recorded
+    if ((healthStatus === 'working' || healthStatus === 'faulty') && !testEvidence.trim()) {
+      setError(t.diagnostics.testEvidenceRequired || 'Working or Faulty status requires actual observed multimeter readings or test evidence.')
+      return
+    }
+
+    setSubmitting(true)
+    setError(null)
+    try {
+      await api.updateComponent(component.id, {
+        health_status: healthStatus,
+        condition,
+        test_evidence: testEvidence.trim() || null,
+      })
+      onClose()
+      await onSuccess()
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return createPortal(
+    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal-card component-form-modal" role="dialog" aria-modal="true">
+        <div className="modal-head">
+          <div>
+            <span className="eyebrow">UPDATE COMPONENT HEALTH // {component.id}</span>
+            <h2>{component.name}</h2>
+            {component.part_number && <p className="modal-subhead">Part #: {component.part_number}</p>}
+          </div>
+          <button className="icon-button" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="modal-body-form">
+          {error && (
+            <div className="form-error-banner">
+              <AlertTriangle size={15} />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div className="form-grid-2">
+            <div className="field-group">
+              <label>Health Status</label>
+              <select
+                value={healthStatus}
+                onChange={(e) => setHealthStatus(e.target.value as ComponentHealthStatus)}
+              >
+                <option value="needs_testing">{t.components.healthStatuses.needs_testing}</option>
+                <option value="working">{t.components.healthStatuses.working}</option>
+                <option value="faulty">{t.components.healthStatuses.faulty}</option>
+                <option value="unknown">{t.components.healthStatuses.unknown}</option>
+              </select>
+            </div>
+            <div className="field-group">
+              <label>Physical Condition</label>
+              <select value={condition} onChange={(e) => setCondition(e.target.value)}>
+                <option value="Good">{t.components.conditions.Good}</option>
+                <option value="LikeNew">{t.components.conditions.LikeNew}</option>
+                <option value="Fair">{t.components.conditions.Fair}</option>
+                <option value="Damaged">{t.components.conditions.Damaged}</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="field-group">
+            <div className="field-label-row">
+              <label>Multimeter / Test Evidence {(healthStatus === 'working' || healthStatus === 'faulty') && <span className="label-req">* (Required)</span>}</label>
+              <span className="field-hint">Diode drop, rail voltage, impedance</span>
+            </div>
+            <textarea
+              rows={4}
+              placeholder="Record actual test findings: diode mode voltage drop, rail resistance, thermal scan results..."
+              value={testEvidence}
+              onChange={(e) => setTestEvidence(e.target.value)}
+              required={healthStatus === 'working' || healthStatus === 'faulty'}
+            />
+            <div className="quick-presets-box">
+              <span className="presets-label">Quick multimeter presets:</span>
+              <div className="presets-pills">
+                {MULTIMETER_PRESETS.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    className="preset-chip"
+                    onClick={() => {
+                      setTestEvidence((prev) => (prev ? `${prev}; ${preset}` : preset))
+                    }}
+                  >
+                    + {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="modal-actions-row">
+            <button type="button" className="button button-secondary" onClick={onClose}>
+              {t.components.cancelBtn}
+            </button>
+            <button type="submit" className="button button-primary" disabled={submitting}>
+              {submitting ? 'Saving...' : 'Save Health Evidence'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+/* =========================================================================
+   SUB-MODALS: REGISTER, EDIT, REUSE, RESALE-REVIEW, DELETE
+   ========================================================================= */
+
+function ComponentRegisterModal({
+  isOpen,
+  onClose,
+  onSuccess,
+  t,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  onSuccess: () => void
+  t: I18nCatalog
+}) {
+  const [name, setName] = useState('')
+  const [partNumber, setPartNumber] = useState('')
+  const [category, setCategory] = useState('other')
+  const [quantity, setQuantity] = useState(1)
+  const [condition, setCondition] = useState('Good')
+  const [location, setLocation] = useState('')
+  const [sourceDevice, setSourceDevice] = useState('')
+  const [caseId, setCaseId] = useState('')
+  const [healthStatus, setHealthStatus] = useState<ComponentHealthStatus>('needs_testing')
+  const [testEvidence, setTestEvidence] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  if (!isOpen) return null
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!name.trim()) {
+      setError('Component name is required.')
+      return
+    }
+    if ((healthStatus === 'working' || healthStatus === 'faulty') && !testEvidence.trim()) {
+      setError(t.diagnostics.testEvidenceRequired || 'Working or Faulty status requires actual observed multimeter readings or test evidence.')
+      return
+    }
+    setSubmitting(true)
+    setError(null)
+    try {
+      await api.createComponent({
+        name: name.trim(),
+        part_number: partNumber.trim() || undefined,
+        category,
+        quantity: Math.max(1, Number(quantity) || 1),
+        condition,
+        location: location.trim() || null,
+        source_device: sourceDevice.trim() || null,
+        case_id: caseId.trim() || null,
+        health_status: healthStatus,
+        test_evidence: testEvidence.trim() || null,
+      })
+      onClose()
+      onSuccess()
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return createPortal(
+    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal-card component-form-modal" role="dialog" aria-modal="true">
+        <div className="modal-head">
+          <div>
+            <span className="eyebrow">COMPONENT INVENTORY // INTAKE</span>
+            <h2>{t.components.registerModalTitle}</h2>
+          </div>
+          <button className="icon-button" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="modal-body-form">
+          {error && (
+            <div className="form-error-banner">
+              <AlertTriangle size={15} />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div className="form-grid-2">
+            <div className="field-group">
+              <label>Component Name *</label>
+              <input
+                type="text"
+                placeholder="e.g. Super AMOLED 120Hz Display Module"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
+            <div className="field-group">
+              <label>Part # / Model</label>
+              <input
+                type="text"
+                placeholder="e.g. GH82-31234A"
+                value={partNumber}
+                onChange={(e) => setPartNumber(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="form-grid-3">
+            <div className="field-group">
+              <label>Category</label>
+              <select value={category} onChange={(e) => setCategory(e.target.value)}>
+                <option value="screen">{t.components.categories.screen}</option>
+                <option value="battery">{t.components.categories.battery}</option>
+                <option value="mother_board">{t.components.categories.mother_board}</option>
+                <option value="charging_port">{t.components.categories.charging_port}</option>
+                <option value="camera">{t.components.categories.camera}</option>
+                <option value="audio">{t.components.categories.audio}</option>
+                <option value="sensor">{t.components.categories.sensor}</option>
+                <option value="other">{t.components.categories.other}</option>
+              </select>
+            </div>
+            <div className="field-group">
+              <label>Initial Quantity</label>
+              <input
+                type="number"
+                min="1"
+                value={quantity}
+                onChange={(e) => setQuantity(Number(e.target.value))}
+                required
+              />
+            </div>
+            <div className="field-group">
+              <label>Physical Condition</label>
+              <select value={condition} onChange={(e) => setCondition(e.target.value)}>
+                <option value="LikeNew">{t.components.conditions.LikeNew}</option>
+                <option value="Good">{t.components.conditions.Good}</option>
+                <option value="Fair">{t.components.conditions.Fair}</option>
+                <option value="Damaged">{t.components.conditions.Damaged}</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="form-grid-2">
+            <div className="field-group">
+              <label>Storage Location</label>
+              <input
+                type="text"
+                placeholder="e.g. Shelf 4, Bin C-12"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+              />
+            </div>
+            <div className="field-group">
+              <label>Source Device / Donor Board</label>
+              <input
+                type="text"
+                placeholder="e.g. OnePlus Nord CE 3 Donor"
+                value={sourceDevice}
+                onChange={(e) => setSourceDevice(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="form-grid-2">
+            <div className="field-group">
+              <label>Associated Case ID (Optional)</label>
+              <input
+                type="text"
+                placeholder="e.g. FX-1048"
+                value={caseId}
+                onChange={(e) => setCaseId(e.target.value)}
+              />
+            </div>
+            <div className="field-group">
+              <label>Initial Health Status</label>
+              <select
+                value={healthStatus}
+                onChange={(e) => setHealthStatus(e.target.value as ComponentHealthStatus)}
+              >
+                <option value="needs_testing">{t.components.healthStatuses.needs_testing}</option>
+                <option value="working">{t.components.healthStatuses.working}</option>
+                <option value="faulty">{t.components.healthStatuses.faulty}</option>
+                <option value="unknown">{t.components.healthStatuses.unknown}</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="field-group">
+            <label>Multimeter / Diagnostic Test Evidence</label>
+            <textarea
+              rows={3}
+              placeholder="Record exact test findings: diode drop, rail impedance, touch digitizer pass rate, thermal readings..."
+              value={testEvidence}
+              onChange={(e) => setTestEvidence(e.target.value)}
+            />
+          </div>
+
+          <div className="modal-actions-row">
+            <button type="button" className="button button-secondary" onClick={onClose}>
+              {t.components.cancelBtn}
+            </button>
+            <button type="submit" className="button button-primary" disabled={submitting}>
+              {submitting ? 'Registering...' : t.components.registerBtn}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+function ComponentEditModal({
+  component,
+  onClose,
+  onSuccess,
+  t,
+}: {
+  component: Component
+  onClose: () => void
+  onSuccess: () => void
+  t: I18nCatalog
+}) {
+  const [name, setName] = useState(component.name)
+  const [partNumber, setPartNumber] = useState(component.part_number)
+  const [category, setCategory] = useState(component.category)
+  const [quantity, setQuantity] = useState(component.quantity)
+  const [condition, setCondition] = useState(component.condition)
+  const [location, setLocation] = useState(component.location || '')
+  const [sourceDevice, setSourceDevice] = useState(component.source_device || '')
+  const [caseId, setCaseId] = useState(component.case_id || '')
+  const [healthStatus, setHealthStatus] = useState<ComponentHealthStatus>(component.health_status)
+  const [testEvidence, setTestEvidence] = useState(component.test_evidence || '')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    if ((healthStatus === 'working' || healthStatus === 'faulty') && !testEvidence.trim()) {
+      setError(t.diagnostics.testEvidenceRequired || 'Working or Faulty status requires actual observed multimeter readings or test evidence.')
+      return
+    }
+    setSubmitting(true)
+    setError(null)
+    try {
+      await api.updateComponent(component.id, {
+        name: name.trim(),
+        part_number: partNumber.trim(),
+        category,
+        quantity: Math.max(component.reserved_quantity + component.used_quantity, Number(quantity)),
+        condition,
+        location: location.trim() || null,
+        source_device: sourceDevice.trim() || null,
+        case_id: caseId.trim() || null,
+        health_status: healthStatus,
+        test_evidence: testEvidence.trim() || null,
+      })
+      onClose()
+      onSuccess()
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return createPortal(
+    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal-card component-form-modal" role="dialog" aria-modal="true">
+        <div className="modal-head">
+          <div>
+            <span className="eyebrow">{component.id} // EDIT COMPONENT</span>
+            <h2>{t.components.editModalTitle}</h2>
+          </div>
+          <button className="icon-button" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="modal-body-form">
+          {error && (
+            <div className="form-error-banner">
+              <AlertTriangle size={15} />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div className="form-grid-2">
+            <div className="field-group">
+              <label>Component Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
+            <div className="field-group">
+              <label>Part Number</label>
+              <input
+                type="text"
+                value={partNumber}
+                onChange={(e) => setPartNumber(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="form-grid-3">
+            <div className="field-group">
+              <label>Category</label>
+              <input
+                type="text"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              />
+            </div>
+            <div className="field-group">
+              <label>Total Quantity (Min: {component.reserved_quantity + component.used_quantity})</label>
+              <input
+                type="number"
+                min={component.reserved_quantity + component.used_quantity}
+                value={quantity}
+                onChange={(e) => setQuantity(Number(e.target.value))}
+                required
+              />
+            </div>
+            <div className="field-group">
+              <label>Physical Condition</label>
+              <select value={condition} onChange={(e) => setCondition(e.target.value)}>
+                <option value="LikeNew">{t.components.conditions.LikeNew}</option>
+                <option value="Good">{t.components.conditions.Good}</option>
+                <option value="Fair">{t.components.conditions.Fair}</option>
+                <option value="Damaged">{t.components.conditions.Damaged}</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="form-grid-2">
+            <div className="field-group">
+              <label>Storage Location</label>
+              <input
+                type="text"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+              />
+            </div>
+            <div className="field-group">
+              <label>Health Status</label>
+              <select
+                value={healthStatus}
+                onChange={(e) => setHealthStatus(e.target.value as ComponentHealthStatus)}
+              >
+                <option value="working">{t.components.healthStatuses.working}</option>
+                <option value="needs_testing">{t.components.healthStatuses.needs_testing}</option>
+                <option value="faulty">{t.components.healthStatuses.faulty}</option>
+                <option value="unknown">{t.components.healthStatuses.unknown}</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="form-grid-2">
+            <div className="field-group">
+              <label>Source Device</label>
+              <input
+                type="text"
+                value={sourceDevice}
+                onChange={(e) => setSourceDevice(e.target.value)}
+              />
+            </div>
+            <div className="field-group">
+              <label>Associated Case ID</label>
+              <input
+                type="text"
+                value={caseId}
+                onChange={(e) => setCaseId(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="field-group">
+            <label>Multimeter / Diagnostic Test Evidence</label>
+            <textarea
+              rows={3}
+              value={testEvidence}
+              onChange={(e) => setTestEvidence(e.target.value)}
+            />
+          </div>
+
+          <div className="modal-actions-row">
+            <button type="button" className="button button-secondary" onClick={onClose}>
+              {t.components.cancelBtn}
+            </button>
+            <button type="submit" className="button button-primary" disabled={submitting}>
+              {submitting ? 'Saving...' : t.components.saveChangesBtn}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+function ComponentReuseModal({
+  component,
+  action,
+  onClose,
+  onSuccess,
+  t,
+}: {
+  component: Component
+  action: 'reserve' | 'use' | 'release'
+  onClose: () => void
+  onSuccess: () => void
+  t: I18nCatalog
+}) {
+  const availableQty = Math.max(0, component.quantity - component.reserved_quantity - component.used_quantity)
+  const maxAllowed =
+    action === 'reserve'
+      ? availableQty
+      : action === 'release'
+      ? component.reserved_quantity
+      : availableQty + component.reserved_quantity
+
+  const [quantity, setQuantity] = useState(1)
+  const [caseId, setCaseId] = useState(component.case_id || '')
+  const [notes, setNotes] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (quantity < 1 || quantity > maxAllowed) {
+      setError(`Quantity must be between 1 and ${maxAllowed}.`)
+      return
+    }
+    setSubmitting(true)
+    setError(null)
+    try {
+      await api.reuseComponent(component.id, {
+        action,
+        quantity,
+        case_id: caseId.trim() || undefined,
+        notes: notes.trim() || undefined,
+      })
+      onClose()
+      onSuccess()
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const actionTitles = {
+    reserve: t.components.confirmReserveBtn,
+    use: t.components.confirmUseBtn,
+    release: t.components.confirmReleaseBtn,
+  }
+
+  return createPortal(
+    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal-card component-reuse-modal" role="dialog" aria-modal="true">
+        <div className="modal-head">
+          <div>
+            <span className="eyebrow">REUSE ACTION // {action.toUpperCase()}</span>
+            <h2>{t.components.reserveModalTitle}</h2>
+          </div>
+          <button className="icon-button" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="modal-body-form">
+          {error && (
+            <div className="form-error-banner">
+              <AlertTriangle size={15} />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div className="component-modal-info-box">
+            <strong>{component.name}</strong>
+            <span>Part: {component.part_number} · Available: {availableQty} · Reserved: {component.reserved_quantity}</span>
+          </div>
+
+          <div className="form-grid-2">
+            <div className="field-group">
+              <label>{t.components.reserveQtyLabel} (Max: {maxAllowed})</label>
+              <input
+                type="number"
+                min="1"
+                max={maxAllowed}
+                value={quantity}
+                onChange={(e) => setQuantity(Number(e.target.value))}
+                required
+              />
+            </div>
+            <div className="field-group">
+              <label>{t.components.reserveCaseLabel}</label>
+              <input
+                type="text"
+                placeholder="e.g. FX-1048"
+                value={caseId}
+                onChange={(e) => setCaseId(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="field-group">
+            <label>{t.components.reserveNotesLabel}</label>
+            <input
+              type="text"
+              placeholder="e.g. Bench test replacement for charging rail fault"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+
+          <div className="modal-actions-row">
+            <button type="button" className="button button-secondary" onClick={onClose}>
+              {t.components.cancelBtn}
+            </button>
+            <button type="submit" className="button button-primary" disabled={submitting || maxAllowed <= 0}>
+              {submitting ? 'Processing...' : actionTitles[action]}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+function ComponentResaleReviewModal({
+  component,
+  onClose,
+  onSuccess,
+  t,
+}: {
+  component: Component
+  onClose: () => void
+  onSuccess: () => void
+  t: I18nCatalog
+}) {
+  const isEligibleForApproval =
+    component.health_status === 'working' &&
+    component.condition !== 'Damaged' &&
+    Boolean(component.test_evidence && component.test_evidence.trim().length > 0)
+
+  const [decision, setDecision] = useState<ComponentResaleStatus>(
+    component.resale_status === 'approved' ? 'approved' : 'under_review'
+  )
+  const [reason, setReason] = useState(component.resale_reason || '')
+  const [condition, setCondition] = useState(component.resale_condition || '')
+  const [price, setPrice] = useState(component.resale_price ? String(component.resale_price) : '')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!reason.trim()) {
+      setError('A review rationale or justification note is required.')
+      return
+    }
+    if (decision === 'approved' && !isEligibleForApproval) {
+      setError('Cannot approve: component must be verified working with test evidence and not damaged.')
+      return
+    }
+
+    setSubmitting(true)
+    setError(null)
+    try {
+      await api.reviewComponentResale(component.id, {
+        resale_status: decision,
+        review_reason: reason.trim(),
+        review_condition: condition.trim() || null,
+        resale_price: price ? Number(price) : null,
+        reviewed_by: 'Lead Hardware Tech',
+      })
+      onClose()
+      onSuccess()
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return createPortal(
+    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal-card component-resale-modal" role="dialog" aria-modal="true">
+        <div className="modal-head">
+          <div>
+            <span className="eyebrow">QUALITY ASSURANCE // RESALE WORKFLOW</span>
+            <h2>{t.components.reviewModalTitle}</h2>
+          </div>
+          <button className="icon-button" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="modal-body-form">
+          {error && (
+            <div className="form-error-banner">
+              <AlertTriangle size={15} />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {/* Strict Safety Safeguard Banner */}
+          {!isEligibleForApproval && (
+            <div className="safety-safeguard-alert">
+              <ShieldAlert size={18} />
+              <div>
+                <strong>Safety & Quality Invariant:</strong>
+                <p>
+                  Untested, faulty, or damaged components cannot be approved for resale. Current component health is{' '}
+                  <code>{component.health_status}</code> with condition <code>{component.condition}</code>.
+                  Resale approval requires verified working test evidence.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="component-modal-info-box">
+            <strong>{component.name}</strong>
+            <span>Part: {component.part_number} · Health: {component.health_status} · Evidence: {component.test_evidence ? 'Recorded' : 'None'}</span>
+          </div>
+
+          <div className="field-group">
+            <label>{t.components.resaleDecisionLabel}</label>
+            <div className="resale-decision-segmented">
+              <label className={`resale-seg-label ${decision === 'under_review' ? 'active' : ''}`}>
+                <input
+                  type="radio"
+                  name="resale_decision"
+                  value="under_review"
+                  checked={decision === 'under_review'}
+                  onChange={() => setDecision('under_review')}
+                />
+                <span>{t.components.resaleStatuses.under_review}</span>
+              </label>
+
+              <label
+                className={`resale-seg-label ${decision === 'approved' ? 'active' : ''} ${!isEligibleForApproval ? 'disabled' : ''}`}
+                title={!isEligibleForApproval ? 'Locked: component must be working and tested' : ''}
+              >
+                <input
+                  type="radio"
+                  name="resale_decision"
+                  value="approved"
+                  disabled={!isEligibleForApproval}
+                  checked={decision === 'approved'}
+                  onChange={() => setDecision('approved')}
+                />
+                <span>{t.components.resaleStatuses.approved}</span>
+              </label>
+
+              <label className={`resale-seg-label ${decision === 'not_eligible' ? 'active' : ''}`}>
+                <input
+                  type="radio"
+                  name="resale_decision"
+                  value="not_eligible"
+                  checked={decision === 'not_eligible'}
+                  onChange={() => setDecision('not_eligible')}
+                />
+                <span>{t.components.resaleStatuses.not_eligible}</span>
+              </label>
+            </div>
+          </div>
+
+          <div className="field-group">
+            <label>{t.components.resaleReasonLabel} *</label>
+            <textarea
+              rows={3}
+              placeholder="e.g. Verified 100% digitizer pass rate on bench fixture. Optical path clean with zero dead pixels."
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="form-grid-2">
+            <div className="field-group">
+              <label>{t.components.resaleConditionLabel}</label>
+              <input
+                type="text"
+                placeholder="e.g. A-Grade OEM pull"
+                value={condition}
+                onChange={(e) => setCondition(e.target.value)}
+              />
+            </div>
+            <div className="field-group">
+              <label>{t.components.resalePriceLabel}</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="e.g. 65.00"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="modal-actions-row">
+            <button type="button" className="button button-secondary" onClick={onClose}>
+              {t.components.cancelBtn}
+            </button>
+            <button
+              type="submit"
+              className="button button-primary"
+              disabled={submitting || (decision === 'approved' && !isEligibleForApproval)}
+            >
+              {submitting ? 'Submitting...' : t.components.submitReviewBtn}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+function ComponentDeleteModal({
+  component,
+  onClose,
+  onSuccess,
+  t,
+}: {
+  component: Component
+  onClose: () => void
+  onSuccess: () => void
+  t: I18nCatalog
+}) {
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleDelete = async () => {
+    setSubmitting(true)
+    try {
+      await api.deleteComponent(component.id)
+      onClose()
+      onSuccess()
+    } catch {
+      // ignore
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return createPortal(
+    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal-card modal-delete-card" role="dialog" aria-modal="true">
+        <div className="modal-head">
+          <div className="modal-title-wrap">
+            <span className="eyebrow">DANGER ZONE</span>
+            <h2>Delete Electronic Component?</h2>
+          </div>
+          <button className="icon-button" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+        <div className="modal-body">
+          <p>
+            Permanently remove <strong>{component.name} ({component.id})</strong> from the inventory?
+            This will wipe recorded test evidence and stock counts.
+          </p>
+        </div>
+        <div className="modal-actions-row">
+          <button type="button" className="button button-secondary" onClick={onClose}>
+            {t.components.cancelBtn}
+          </button>
+          <button
+            type="button"
+            className="button button-danger"
+            onClick={() => void handleDelete()}
+            disabled={submitting}
+          >
+            {submitting ? 'Deleting...' : t.components.btnDelete}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   )
 }

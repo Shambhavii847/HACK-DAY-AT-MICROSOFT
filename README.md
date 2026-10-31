@@ -1,10 +1,10 @@
-# Fixora AI — Evidence-grounded repair intelligence
+# Revix AI — Evidence-grounded repair intelligence
 
-Fixora AI is a full-stack prototype for electronics repair technicians. It connects reported symptoms, technician-entered test results, AI-assisted next-check recommendations, and confirmed repair outcomes in one traceable workflow.
+Revix AI is a full-stack prototype for electronics repair technicians. It connects reported symptoms, technician-entered test results, AI-assisted next-check recommendations, and confirmed repair outcomes in one traceable workflow.
 
 **Core product idea:** `Symptom → Test → Observed result → Suggested next check → Confirmed fault → Repair action → Outcome`
 
-A general chatbot can suggest possible repairs. Fixora is designed to keep the evidence and final outcome attached to the repair record, so recommendations remain reviewable and future cases can retrieve technician-confirmed precedents.
+A general chatbot can suggest possible repairs. Revix is designed to keep the evidence and final outcome attached to the repair record, so recommendations remain reviewable and future cases can retrieve technician-confirmed precedents.
 
 > **Prototype and safety notice:** This software is decision support, not a diagnostic authority or manufacturer service manual. It must not replace qualified technician judgement. All starter repair records are fictional demonstrations and are visibly marked as samples. Generic prototype guidance is not manufacturer-specific service documentation.
 
@@ -50,7 +50,7 @@ You do **not** need a local GPU to use the hosted Gemini API. Without an API key
 2. Open Terminal and go to the project directory:
 
    ```bash
-   cd /path/to/fixora-ai
+   cd /path/to/revix-ai
    ```
 
 3. Start both services:
@@ -73,7 +73,7 @@ Edit `backend/.env` and add your key:
 ```dotenv
 GEMINI_API_KEY=your_real_key_here
 GEMMA_MODEL=gemma-4-26b-a4b-it
-DATABASE_URL=sqlite:///./fixora.db
+DATABASE_URL=sqlite:///./revix.db
 CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 ```
 
@@ -84,7 +84,7 @@ Stop the servers with `Ctrl+C` and restart `./start.sh`. Check the header and `h
 Terminal 1 — backend:
 
 ```bash
-cd fixora-ai/backend
+cd revix-ai/backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -95,7 +95,7 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 Terminal 2 — frontend:
 
 ```bash
-cd fixora-ai/frontend
+cd revix-ai/frontend
 npm install
 npm run dev
 ```
@@ -157,7 +157,7 @@ Do not deploy the demo with unrestricted public write access or place real custo
 ## Project structure
 
 ```text
-fixora-ai/
+revix-ai/
 ├── README.md
 ├── LICENSE
 ├── start.sh

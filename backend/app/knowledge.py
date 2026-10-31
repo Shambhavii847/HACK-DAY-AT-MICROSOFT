@@ -1,6 +1,6 @@
 """Small, explicit, prototype knowledge base.
 
-These are Fixora's generic workflow and safety notes, not manufacturer service manuals.
+These are Revix's generic workflow and safety notes, not manufacturer service manuals.
 They deliberately avoid model-specific repair instructions or unsupported specifications.
 """
 
@@ -8,7 +8,7 @@ KNOWLEDGE_SOURCES: list[dict[str, str | None]] = [
     {
         "id": "FX-GUIDE-001",
         "title": "External power-path triage",
-        "kind": "Fixora curated prototype guidance",
+        "kind": "Revix curated prototype guidance",
         "scope": "Generic charging complaints",
         "source_url": None,
         "review_note": "Prototype workflow note; not manufacturer-specific service documentation.",
@@ -22,7 +22,7 @@ KNOWLEDGE_SOURCES: list[dict[str, str | None]] = [
     {
         "id": "FX-SAFE-001",
         "title": "Battery and connector safety baseline",
-        "kind": "Fixora safety checklist",
+        "kind": "Revix safety checklist",
         "scope": "All electronic devices; especially phones and lithium-ion batteries",
         "source_url": None,
         "review_note": "Conservative safety baseline for this prototype; not a substitute for manufacturer guidance or training.",
@@ -36,7 +36,7 @@ KNOWLEDGE_SOURCES: list[dict[str, str | None]] = [
     {
         "id": "FX-EVIDENCE-001",
         "title": "Evidence before hypothesis",
-        "kind": "Fixora diagnostic process note",
+        "kind": "Revix diagnostic process note",
         "scope": "All diagnostic sessions",
         "source_url": None,
         "review_note": "Internal product workflow guidance; not a diagnostic authority.",
@@ -49,7 +49,7 @@ KNOWLEDGE_SOURCES: list[dict[str, str | None]] = [
     {
         "id": "FX-HISTORY-001",
         "title": "Using repair memory carefully",
-        "kind": "Fixora repair-history note",
+        "kind": "Revix repair-history note",
         "scope": "Historical case retrieval",
         "source_url": None,
         "review_note": "Internal product workflow guidance; demo cases are fictional.",

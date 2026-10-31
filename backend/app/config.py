@@ -6,7 +6,8 @@ class Settings(BaseSettings):
     app_env: str = "development"
     gemini_api_key: str | None = None
     gemma_model: str = "gemma-4-26b-a4b-it"
-    database_url: str = "sqlite:///./fixora.db"
+    fast_model: str = "gemini-3.1-flash-lite"
+    database_url: str = "sqlite:///./revix.db"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     model_config = SettingsConfigDict(env_file=(".env", "backend/.env"), extra="ignore", case_sensitive=False)

@@ -1,1 +1,1 @@
-"""Fixora AI backend package."""
+"""Revix AI backend package."""
